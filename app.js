@@ -13,6 +13,8 @@ const serviceNames = {
   other: "その他"
 };
 
+const mediaLabels = { movie: "映画", drama: "ドラマシリーズ", anime: "アニメ", unknown: "未分類" };
+
 const bands = {
   short: { label: "90分未満" },
   around90: { label: "90分前後" },
@@ -55,6 +57,7 @@ const sampleItems = [
 
 const filters = {
   query: $("#query"),
+  mediaType: $("#mediaType"),
   service: $("#service"),
   genre: $("#genre"),
   duration: $("#duration"),
@@ -133,6 +136,7 @@ function searchable(item) {
 function matches(item) {
   const query = filters.query.value.trim().toLocaleLowerCase("ja");
   if (query && !searchable(item).includes(query)) return false;
+  if (filters.mediaType.value && (item.mediaType || "unknown") !== filters.mediaType.value) return false;
   if (filters.service.value && serviceKey(item) !== filters.service.value) return false;
   if (filters.genre.value && !(item.genres || []).includes(filters.genre.value)) return false;
   if (filters.duration.value && durationKey(item.runtime) !== filters.duration.value) return false;
@@ -204,6 +208,7 @@ function updateQuickFilters() {
 
 function updateFilterSummary() {
   const parts = [];
+  if (filters.mediaType.value) parts.push(mediaLabels[filters.mediaType.value] || "");
   const watchLabel = filters.watchState.selectedOptions[0]?.textContent;
   const durationLabel = filters.duration.selectedOptions[0]?.textContent;
   const serviceLabelText = filters.service.selectedOptions[0]?.textContent;
@@ -226,6 +231,7 @@ function createCard(item) {
   poster.addEventListener("error", () => poster.removeAttribute("src"));
   const remaining = item.expiresAt ? daysUntil(item.expiresAt) : null;
   $(".movie-meta", card).textContent = [
+    item.mediaType && item.mediaType !== "unknown" ? mediaLabels[item.mediaType] : null,
     serviceLabel(item),
     formatRuntime(item.runtime),
     item.year,
@@ -497,6 +503,7 @@ $("#exportJson").addEventListener("click", () => {
 
 $("#clearFilters").addEventListener("click", () => {
   filters.query.value = "";
+  filters.mediaType.value = "";
   filters.service.value = "";
   filters.genre.value = "";
   filters.duration.value = "";
