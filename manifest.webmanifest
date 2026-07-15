@@ -1,0 +1,10 @@
+{
+  "name": "配信マイリスト Safariビューア",
+  "short_name": "My List",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "background_color": "#101114",
+  "theme_color": "#101114",
+  "lang": "ja",
+  "icons": []
+}
