@@ -15,7 +15,7 @@
     <main class="app-shell">
       <header class="topbar">
         <div>
-          <p class="eyebrow">STREAMING MY LIST</p>
+          <p class="brand"><span class="brand-mark">ML</span>MY LIST BROWSER</p>
           <h1>次に観る一本</h1>
         </div>
         <div class="topbar-actions">
@@ -139,6 +139,16 @@
       <article id="detailContent" class="detail-card"></article>
     </dialog>
 
+    <dialog id="trailerDialog" class="trailer-dialog">
+      <div class="trailer-head">
+        <h2 id="trailerTitle"></h2>
+        <button type="button" id="trailerClose" aria-label="閉じる">×</button>
+      </div>
+      <div class="trailer-body">
+        <iframe id="trailerFrame" title="予告編" allow="autoplay; encrypted-media; fullscreen" allowfullscreen></iframe>
+      </div>
+    </dialog>
+
     <dialog id="syncDialog">
       <form id="syncForm" method="dialog" class="sync-form">
         <h2>Gist同期の設定</h2>
@@ -158,10 +168,12 @@
         <div class="movie-copy">
           <div class="movie-meta"></div>
           <h3></h3>
+          <div class="ratings"></div>
           <div class="chips"></div>
           <div class="movie-actions">
             <button class="watched-button" type="button">観た</button>
             <button class="favorite-button" type="button" aria-label="お気に入り">☆</button>
+            <button class="trailer-button" type="button">▶ 予告編</button>
             <button class="detail-button" type="button">詳細</button>
             <a class="watch-link" target="_blank" rel="noreferrer">開く</a>
           </div>

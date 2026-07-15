@@ -235,11 +235,20 @@ function createCard(item) {
     serviceLabel(item),
     formatRuntime(item.runtime),
     item.year,
-    item.rating ? `★${item.rating}` : null,
     remaining !== null && remaining <= 30 ? (remaining <= 0 ? "まもなく終了" : `期限あと${remaining}日`) : null,
     item.access
   ].filter(Boolean).join(" · ");
   $("h3", card).textContent = item.title;
+  const ratings = $(".ratings", card);
+  const addScore = (className, text) => {
+    const span = document.createElement("span");
+    span.className = className;
+    span.textContent = text;
+    ratings.append(span);
+  };
+  if (item.rating) addScore("score-tmdb", `★ ${item.rating}`);
+  if (item.imdbRating) addScore("score-imdb", `IMDb ${item.imdbRating}`);
+  if (item.rtScore) addScore("score-rt", `🍅 ${item.rtScore}%`);
 
   const chips = $(".chips", card);
   [...(item.genres || []).slice(0, 2), ...(item.tags || []).slice(0, 1)].forEach((label) => {
@@ -258,10 +267,22 @@ function createCard(item) {
   favorite.classList.toggle("is-active", Boolean(item.favorite));
   favorite.addEventListener("click", () => patchItem(item.id, { favorite: !item.favorite }));
 
+  $(".trailer-button", card).addEventListener("click", () => openTrailer(item));
   $(".detail-button", card).addEventListener("click", () => openDetail(item));
   const link = $(".watch-link", card);
   link.href = item.url || "https://video.unext.jp/";
   return card;
+}
+
+// 予告編: PC側の補完で取得済みのYouTubeキーを再生。なければYouTube検索へ
+function openTrailer(item) {
+  if (!item.trailerKey) {
+    window.open(`https://www.youtube.com/results?search_query=${encodeURIComponent(`${item.title} 予告編`)}`, "_blank", "noreferrer");
+    return;
+  }
+  $("#trailerTitle").textContent = item.title;
+  $("#trailerFrame").src = `https://www.youtube-nocookie.com/embed/${item.trailerKey}?autoplay=1&playsinline=1`;
+  $("#trailerDialog").showModal();
 }
 
 function render() {
@@ -314,12 +335,16 @@ function openDetail(item) {
   close.type = "button";
   close.textContent = "閉じる";
   close.addEventListener("click", () => $("#detailDialog").close());
+  const trailer = document.createElement("button");
+  trailer.type = "button";
+  trailer.textContent = "▶ 予告編";
+  trailer.addEventListener("click", () => openTrailer(item));
   const watch = document.createElement("a");
   watch.href = item.url || "https://video.unext.jp/";
   watch.target = "_blank";
   watch.rel = "noreferrer";
   watch.textContent = `${serviceLabel(item)}で開く`;
-  actions.append(close, watch);
+  actions.append(close, trailer, watch);
   content.append(heading, meta, note, actions);
   $("#detailDialog").showModal();
 }
@@ -553,6 +578,12 @@ $("#loadSample").addEventListener("click", () => {
 
 $("#detailDialog").addEventListener("click", (event) => {
   if (event.target === $("#detailDialog")) $("#detailDialog").close();
+});
+
+$("#trailerClose").addEventListener("click", () => $("#trailerDialog").close());
+$("#trailerDialog").addEventListener("close", () => { $("#trailerFrame").src = ""; });
+$("#trailerDialog").addEventListener("click", (event) => {
+  if (event.target === $("#trailerDialog")) $("#trailerDialog").close();
 });
 
 if ("serviceWorker" in navigator && location.protocol !== "file:") {
