@@ -87,6 +87,43 @@ function bestRating(item) {
   const tmdb = parseFloat(item.rating);
   return Math.max(Number.isFinite(imdb) ? imdb : 0, Number.isFinite(tmdb) ? tmdb : 0);
 }
+
+// ジャンルの日英・表記ゆれを1つの日本語ラベルに正規化（facetの乱立を防ぐ）
+const GENRE_CANON = {
+  "action": "アクション", "アクション": "アクション",
+  "adventure": "アドベンチャー", "アドベンチャー": "アドベンチャー", "冒険": "アドベンチャー",
+  "animation": "アニメ", "anime": "アニメ", "アニメ": "アニメ", "アニメーション": "アニメ",
+  "comedy": "コメディ", "コメディ": "コメディ", "コメディー": "コメディ",
+  "crime": "犯罪", "クライム": "犯罪", "犯罪": "犯罪",
+  "documentary": "ドキュメンタリー", "ドキュメンタリー": "ドキュメンタリー", "ドキュメント": "ドキュメンタリー",
+  "drama": "ドラマ", "ドラマ": "ドラマ",
+  "family": "ファミリー", "ファミリー": "ファミリー", "家族": "ファミリー",
+  "fantasy": "ファンタジー", "ファンタジー": "ファンタジー",
+  "history": "歴史", "歴史": "歴史", "ヒストリー": "歴史",
+  "horror": "ホラー", "ホラー": "ホラー",
+  "music": "音楽", "音楽": "音楽", "ミュージック": "音楽",
+  "musical": "ミュージカル", "ミュージカル": "ミュージカル",
+  "mystery": "ミステリー", "ミステリー": "ミステリー",
+  "romance": "ロマンス", "ロマンス": "ロマンス", "恋愛": "ロマンス", "ラブロマンス": "ロマンス", "ラブストーリー": "ロマンス",
+  "science fiction": "SF", "sci-fi": "SF", "scifi": "SF", "sf": "SF", "エスエフ": "SF", "サイエンスフィクション": "SF",
+  "suspense": "サスペンス", "サスペンス": "サスペンス",
+  "thriller": "スリラー", "スリラー": "スリラー",
+  "tv movie": "TV映画", "tvムービー": "TV映画",
+  "war": "戦争", "ウォー": "戦争", "戦争": "戦争",
+  "western": "西部劇", "ウエスタン": "西部劇", "ウェスタン": "西部劇", "西部劇": "西部劇",
+  "kids": "キッズ", "キッズ": "キッズ", "子供": "キッズ", "子ども": "キッズ",
+  "reality": "リアリティ", "リアリティ": "リアリティ", "バラエティ": "バラエティ",
+  "sport": "スポーツ", "sports": "スポーツ", "スポーツ": "スポーツ",
+  "human": "ヒューマン", "ヒューマン": "ヒューマン", "ヒューマンドラマ": "ヒューマン"
+};
+function canonGenre(g) {
+  const key = String(g || "").trim();
+  if (!key) return "";
+  return GENRE_CANON[key] || GENRE_CANON[key.toLowerCase()] || key;
+}
+function itemGenres(item) {
+  return [...new Set((item.genres || []).map(canonGenre).filter(Boolean))];
+}
 function posterOf(item) {
   if (item.imageLocked) return item.image || "";
   if (serviceKey(item) === "prime" && item.tmdbImage) return item.tmdbImage;
@@ -113,7 +150,7 @@ function matches(item) {
   if (F.query) { if (!searchable(item).includes(F.query)) return false; }
   if (F.mediaType && (item.mediaType || "unknown") !== F.mediaType) return false;
   if (F.service && serviceKey(item) !== F.service) return false;
-  if (F.genre && !(item.genres || []).includes(F.genre)) return false;
+  if (F.genre && !itemGenres(item).includes(F.genre)) return false;
   if (F.duration && durationKey(item.runtime) !== F.duration) return false;
   if (F.maxRuntime && (!Number.isFinite(item.runtime) || item.runtime > F.maxRuntime)) return false;
   if (F.minRating && bestRating(item) < F.minRating) return false;
@@ -263,9 +300,17 @@ const QUICK_CHIPS = [
 let libDensity = localStorage.getItem("tonite-density") || "grid";
 let facetsOpen = false;
 
+function hasActiveFilters() {
+  return Boolean(F.query || F.mediaType || F.service || F.genre || F.duration || F.watchState || F.maxRuntime || F.minRating || F.expiringSoon);
+}
+
 function renderLibrary() {
   $("#libQuery").value = F.query;
   $("#libSort").value = F.sort;
+
+  const fbtn = $("#libFilterBtn");
+  fbtn.classList.toggle("is-active", facetsOpen);
+  $(".filter-dot", fbtn).hidden = !hasActiveFilters();
 
   // Quick chips + サービスチップ + ＋
   const chipBox = $("#libQuickChips");
@@ -332,7 +377,7 @@ function renderFacets() {
   };
   const countMedia = (v) => state.items.filter((i) => (i.mediaType || "unknown") === v).length;
   const countDur = (v) => state.items.filter((i) => durationKey(i.runtime) === v).length;
-  const countGenre = (v) => state.items.filter((i) => (i.genres || []).includes(v)).length;
+  const countGenre = (v) => state.items.filter((i) => itemGenres(i).includes(v)).length;
 
   mkRow("大ジャンル", "media", [
     { value: "movie", label: "映画", count: countMedia("movie") },
@@ -354,7 +399,7 @@ function renderFacets() {
     { value: "long", label: "140分以上", count: countDur("long") }
   ], F.duration, (v) => { F.duration = v; F.maxRuntime = 0; });
 
-  const genres = [...new Set(state.items.flatMap((i) => i.genres || []))].sort((a, b) => a.localeCompare(b, "ja"));
+  const genres = [...new Set(state.items.flatMap(itemGenres))].sort((a, b) => a.localeCompare(b, "ja"));
   if (genres.length) mkRow("ジャンル", "genre", genres.map((g) => ({ value: g, label: g, count: countGenre(g) })), F.genre, (v) => { F.genre = v; });
 }
 
@@ -861,6 +906,11 @@ $$("[data-goto]").forEach((el) => el.addEventListener("click", () => showView(el
 $("#libQuery").addEventListener("input", (e) => { F.query = e.target.value.trim().toLocaleLowerCase("ja"); renderLibrary(); });
 $("#libSort").addEventListener("change", (e) => { F.sort = e.target.value; renderLibrary(); });
 $("#densityToggle").addEventListener("click", () => { libDensity = libDensity === "grid" ? "list" : "grid"; localStorage.setItem("tonite-density", libDensity); renderLibrary(); });
+$("#libFilterBtn").addEventListener("click", () => {
+  facetsOpen = !facetsOpen;
+  renderLibrary();
+  if (facetsOpen) requestAnimationFrame(() => $("#libFacets").scrollIntoView({ behavior: "smooth", block: "nearest" }));
+});
 
 // 検索
 $("#searchInput").addEventListener("input", renderSearch);
@@ -943,6 +993,7 @@ $("#syncForm").addEventListener("submit", (event) => {
 $("#syncDialog").addEventListener("click", (event) => { if (event.target === $("#syncDialog")) $("#syncDialog").close(); });
 
 // 詳細・予告編ダイアログ
+$("#detailClose").addEventListener("click", () => $("#detailDialog").close());
 $("#detailDialog").addEventListener("click", (event) => { if (event.target === $("#detailDialog")) $("#detailDialog").close(); });
 $("#trailerClose").addEventListener("click", () => $("#trailerDialog").close());
 $("#trailerDialog").addEventListener("close", () => { $("#trailerFrame").src = ""; });
