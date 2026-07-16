@@ -256,6 +256,28 @@ function createCard(item) {
   if (item.imdbRating) addScore("score-imdb", `IMDb ${item.imdbRating}`);
   if (item.rtScore) addScore("score-rt", `🍅 ${item.rtScore}%`);
 
+  const provWrap = $(".providers", card);
+  if (provWrap && item.providers) {
+    const flat = new Set(item.providers.flatrate || []);
+    const freeAds = new Set([...(item.providers.free || []), ...(item.providers.ads || [])]);
+    const paid = [...new Set([...(item.providers.rent || []), ...(item.providers.buy || [])])].filter((n) => !flat.has(n) && !freeAds.has(n));
+    const entries = [
+      ...[...freeAds].map((n) => [n, "prov-free", "無料"]),
+      ...[...flat].map((n) => [n, "prov-flat", "見放題"]),
+      ...paid.map((n) => [n, "prov-paid", "レンタル/購入"])
+    ];
+    if (entries.length) {
+      provWrap.hidden = false;
+      entries.slice(0, 5).forEach(([n, cls, tip]) => {
+        const pill = document.createElement("span");
+        pill.className = `prov ${cls}`;
+        pill.textContent = n.replace(/Amazon (Prime Video|Video)/i, "Prime Video").replace(/Disney Plus/i, "Disney+");
+        pill.title = `${n}: ${tip}`;
+        provWrap.append(pill);
+      });
+    }
+  }
+
   const chips = $(".chips", card);
   [...(item.genres || []).slice(0, 2), ...(item.tags || []).slice(0, 1)].forEach((label) => {
     const chip = document.createElement("span");

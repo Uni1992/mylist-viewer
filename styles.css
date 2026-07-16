@@ -66,6 +66,11 @@ button, summary, label[for] { cursor: pointer; }
   letter-spacing: -.02em;
 }
 .ratings { display: flex; align-items: center; gap: 8px; min-height: 15px; margin: 3px 0 5px; font-size: 11px; font-weight: 800; }
+.providers { display: flex; flex-wrap: wrap; gap: 4px; margin: 2px 0 6px; }
+.prov { padding: 2px 6px; border-radius: 5px; font-size: 9px; font-weight: 800; white-space: nowrap; }
+.prov-flat { background: color-mix(in srgb, var(--accent) 22%, #000); color: var(--accent); border: 1px solid color-mix(in srgb, var(--accent) 45%, transparent); }
+.prov-free { background: #1c3a2a; color: #78e0a0; border: 1px solid #2f5c42; }
+.prov-paid { background: #3a301c; color: #e6b866; border: 1px solid #5c4a2f; }
 .score-tmdb { color: #f5c518; }
 .score-imdb { padding: 1px 5px; border-radius: 4px; background: #f5c518; color: #131313; font-size: 10px; font-weight: 900; }
 .score-rt { color: #fa4a2a; }
