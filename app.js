@@ -16,7 +16,7 @@ const serviceNames = {
 const mediaLabels = { movie: "映画", drama: "ドラマシリーズ", anime: "アニメ", unknown: "未分類" };
 
 const bands = {
-  short: { label: "90分未満" },
+  short: { label: "80分未満" },
   around90: { label: "90分前後" },
   around120: { label: "120分前後" },
   long: { label: "140分以上" },
@@ -121,8 +121,8 @@ function formatRuntime(value) {
 
 function durationKey(runtime) {
   if (!Number.isFinite(runtime)) return "unknown";
-  if (runtime < 90) return "short";
-  if (runtime < 110) return "around90";
+  if (runtime < 80) return "short";
+  if (runtime <= 100) return "around90";
   if (runtime < 140) return "around120";
   return "long";
 }
@@ -226,7 +226,7 @@ function createCard(item) {
   const card = $("#cardTemplate").content.firstElementChild.cloneNode(true);
   card.classList.toggle("is-watched", Boolean(item.watched));
   const poster = $(".poster", card);
-  const primaryImage = item.image || item.tmdbImage || "";
+  const primaryImage = (serviceKey(item) === "prime" && item.tmdbImage) ? item.tmdbImage : (item.image || item.tmdbImage || "");
   if (primaryImage) poster.src = primaryImage;
   poster.alt = item.title ? `${item.title}のポスター` : "";
   poster.addEventListener("error", () => {
