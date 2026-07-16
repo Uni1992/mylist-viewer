@@ -288,6 +288,9 @@ function createCard(item) {
     if (item.tmdbImage && poster.src !== item.tmdbImage) poster.src = item.tmdbImage;
     else poster.removeAttribute("src");
   });
+  // ポスターのタップで作品詳細を開く
+  poster.style.cursor = "pointer";
+  poster.addEventListener("click", () => openDetail(item));
   const remaining = item.expiresAt ? daysUntil(item.expiresAt) : null;
   $(".movie-meta", card).textContent = [
     item.mediaType && item.mediaType !== "unknown" ? mediaLabels[item.mediaType] : null,
@@ -413,19 +416,63 @@ function render() {
 function openDetail(item) {
   const content = $("#detailContent");
   content.replaceChildren();
-  if (item.image) {
+  const posterUrl = (serviceKey(item) === "prime" && item.tmdbImage) ? item.tmdbImage : (item.image || item.tmdbImage || "");
+  if (posterUrl) {
     const image = document.createElement("img");
-    image.src = item.image;
+    image.src = posterUrl;
     image.alt = "";
     image.referrerPolicy = "no-referrer";
     content.append(image);
   }
   const heading = document.createElement("h2");
   heading.textContent = item.title;
+  const remaining = item.expiresAt ? daysUntil(item.expiresAt) : null;
   const meta = document.createElement("p");
-  meta.textContent = [serviceLabel(item), formatRuntime(item.runtime), item.year, ...(item.genres || [])].filter(Boolean).join(" · ");
-  const note = document.createElement("p");
-  note.textContent = item.note || item.description || "メモはまだありません。";
+  meta.className = "detail-meta";
+  meta.textContent = [
+    item.mediaType && item.mediaType !== "unknown" ? mediaLabels[item.mediaType] : null,
+    serviceLabel(item), formatRuntime(item.runtime), item.year, item.access,
+    remaining !== null && remaining <= 30 ? (remaining <= 0 ? "まもなく終了" : `配信あと${remaining}日`) : null
+  ].filter(Boolean).join(" · ");
+  content.append(heading, meta);
+
+  // 評価
+  const ratingTexts = [
+    item.rating ? `★ ${item.rating}` : null,
+    item.imdbRating ? `IMDb ${item.imdbRating}` : null,
+    item.rtScore ? `🍅 ${item.rtScore}%` : null
+  ].filter(Boolean);
+  if (ratingTexts.length) {
+    const ratings = document.createElement("p");
+    ratings.className = "detail-ratings-line";
+    ratings.textContent = ratingTexts.join("　");
+    content.append(ratings);
+  }
+  // 画質・配信状況
+  const qTags = item.quality ? [item.quality.video, item.quality.hdr, item.quality.audio].filter(Boolean) : [];
+  const provNames = item.providers ? [
+    ...(item.providers.flatrate || []).map((n) => `${n}(見放題)`),
+    ...[...new Set([...(item.providers.rent || []), ...(item.providers.buy || [])])].map((n) => `${n}(レンタル)`)
+  ] : [];
+  const badges = [...qTags, ...provNames.slice(0, 6)];
+  if (badges.length) {
+    const bl = document.createElement("p");
+    bl.className = "detail-badges";
+    bl.textContent = badges.join(" ・ ");
+    content.append(bl);
+  }
+
+  // あらすじ
+  const desc = document.createElement("p");
+  desc.textContent = item.description || "あらすじは登録されていません。";
+  content.append(desc);
+  if (item.note) {
+    const note = document.createElement("p");
+    note.className = "detail-note";
+    note.textContent = `メモ: ${item.note}`;
+    content.append(note);
+  }
+
   const actions = document.createElement("div");
   actions.className = "detail-actions";
   const close = document.createElement("button");
@@ -440,9 +487,9 @@ function openDetail(item) {
   watch.href = item.url || "https://video.unext.jp/";
   watch.target = "_blank";
   watch.rel = "noreferrer";
-  watch.textContent = `${serviceLabel(item)}で開く`;
+  watch.textContent = `${serviceLabel(item)}で観る`;
   actions.append(close, trailer, watch);
-  content.append(heading, meta, note, actions);
+  content.append(actions);
   $("#detailDialog").showModal();
 }
 

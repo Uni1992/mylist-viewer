@@ -400,6 +400,10 @@ dialog::backdrop {
   color: var(--muted);
   line-height: 1.75;
 }
+.detail-card .detail-meta { margin: 2px 0 8px; font-size: 12px; letter-spacing: .03em; }
+.detail-card .detail-ratings-line { margin: 0 0 6px; color: #f5c518; font-size: 14px; font-weight: 800; }
+.detail-card .detail-badges { margin: 0 0 10px; color: #9db6f0; font-size: 12px; font-weight: 700; line-height: 1.7; }
+.detail-card .detail-note { margin: 10px 0 0; padding: 9px 11px; border-left: 2px solid var(--accent); background: #ffffff08; font-size: 13px; }
 .detail-actions {
   position: sticky;
   bottom: -18px;
