@@ -2,7 +2,7 @@ const $ = (selector, root = document) => root.querySelector(selector);
 const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
 
 // 設定画面に表示するアプリ版数。デプロイのたびに上げ、実機で更新が届いたか確認できるようにする
-const APP_VERSION = "3.4.0";
+const APP_VERSION = "3.5.0";
 
 const storageKey = "streaming-mobile-viewer-items";
 const legacyStorageKey = "unext-mobile-viewer-items";
@@ -81,13 +81,20 @@ const SERVICE_LOGOS = {
   appletv: "logos/appletv.svg",
   unext: "logos/unext.svg"
 };
-function serviceLogoImg(key, className = "svc-logo") {
+// ロゴの縦横比（マスク表示で幅を決めるため）
+const SERVICE_LOGO_RATIO = { netflix: 3.7, prime: 3.25, disney: 1.84, appletv: 2.63, unext: 4.13 };
+// iOS SafariはSVG画像へのCSSフィルターが不安定なので、マスク方式で白いワードマークを描く
+function serviceLogoEl(key, height = 15) {
   if (!SERVICE_LOGOS[key]) return null;
-  const img = document.createElement("img");
-  img.src = SERVICE_LOGOS[key];
-  img.alt = serviceLabel(key);
-  img.className = className;
-  return img;
+  const el = document.createElement("span");
+  el.className = "logo-mask";
+  el.style.width = `${Math.round(height * (SERVICE_LOGO_RATIO[key] || 3))}px`;
+  el.style.height = `${height}px`;
+  el.style.webkitMaskImage = `url(${SERVICE_LOGOS[key]})`;
+  el.style.maskImage = `url(${SERVICE_LOGOS[key]})`;
+  el.setAttribute("role", "img");
+  el.setAttribute("aria-label", serviceLabel(key));
+  return el;
 }
 
 // 公開年→年代
@@ -350,8 +357,8 @@ function renderHome() {
     const card = document.createElement("button");
     card.type = "button";
     card.className = "service-card";
-    // 公式ロゴ（白モノクロ）で表示。ロゴが無いサービスはテキスト
-    const logo = serviceLogoImg(key);
+    // 公式ロゴ（白マスク）で表示。ロゴが無いサービスはテキスト
+    const logo = serviceLogoEl(key, 14);
     const name = document.createElement("span");
     name.className = `sc-name svc-${key}`;
     if (logo) name.append(logo); else name.textContent = serviceShort[key] || serviceLabel(key);
@@ -765,7 +772,7 @@ function renderSettings() {
     label.className = "settings-label";
     const dot = document.createElement("span");
     dot.className = `settings-dot ${count ? "on" : ""}`;
-    label.append(dot, serviceLogoImg(key) || serviceLabel(key));
+    label.append(dot, serviceLogoEl(key, 15) || serviceLabel(key));
     const value = document.createElement("span");
     value.className = "settings-value";
     value.textContent = count ? `${count}作品` : "未接続";
@@ -845,13 +852,10 @@ function openDetail(item) {
       chip.rel = "noreferrer";
       chip.setAttribute("aria-label", `${svc.label}で観る（${svc.kind}）`);
       chip.href = svc.key === own && item.url ? item.url : (SERVICE_SEARCH[svc.key]?.(item.title) || item.providers?.link || "#");
-      // PCのファセットと同じ、横長の公式ワードマークロゴで統一する
-      if (SERVICE_LOGOS[svc.key]) {
-        const img = document.createElement("img");
-        img.src = SERVICE_LOGOS[svc.key];
-        img.alt = svc.label;
-        img.className = "wordmark-logo";
-        chip.append(img);
+      // 横長の公式ワードマークロゴ（白マスク・大きめで視認性を確保）
+      const logo = serviceLogoEl(svc.key, 18);
+      if (logo) {
+        chip.append(logo);
       } else {
         const name = document.createElement("b");
         name.textContent = svc.label;
@@ -1001,6 +1005,7 @@ const GistSync = (() => {
     if (!config.token || !config.gistId || syncing) return;
     syncing = true;
     setStatus("同期中…");
+    if (state.currentView === "settings") $("#settingsSyncState").textContent = "同期中…";
     try {
       const headers = { Accept: "application/vnd.github+json", Authorization: `Bearer ${config.token}` };
       const response = await fetch(`${GIST_API}/${config.gistId}`, { headers });
@@ -1029,7 +1034,14 @@ const GistSync = (() => {
       setStatus(`同期完了（${state.items.length}作品・${new Date().toLocaleTimeString("ja-JP", { hour: "2-digit", minute: "2-digit" })}）`);
       if (state.currentView === "settings") renderSettings();
     } catch (error) {
-      const friendly = friendlySyncError(error.message);
+      let friendly = friendlySyncError(error.message);
+      // ネットワークエラーの場合、GitHub自体への疎通を実測して原因を切り分ける
+      if (/ネットワークに接続できません/.test(friendly)) {
+        try {
+          const probe = await fetch("https://api.github.com/zen", { cache: "no-store" });
+          if (probe.ok) friendly = "GitHubには届いていますが同期リクエストが失敗しました。トークンとGist IDを確認し、もう一度お試しください";
+        } catch { /* 本当にネットワーク不通 */ }
+      }
       setConfig({ ...getConfig(), lastError: friendly, lastErrorAt: new Date().toISOString() });
       setStatus(`同期に失敗しました: ${friendly}`, true);
       if (state.currentView === "settings") renderSettings();
@@ -1145,7 +1157,11 @@ function openSyncDialog() {
 }
 $("#syncButton").addEventListener("click", openSyncDialog);
 $("#settingsSync").addEventListener("click", openSyncDialog);
-$("#settingsSyncNow").addEventListener("click", () => GistSync.syncNow());
+$("#settingsSyncNow").addEventListener("click", () => {
+  // 押した瞬間に反応を返す（結果はsyncNowが同期完了/失敗で上書きする）
+  $("#settingsSyncState").textContent = "同期中…";
+  GistSync.syncNow();
+});
 $("#syncCancel").addEventListener("click", () => $("#syncDialog").close());
 $("#syncForm").addEventListener("submit", (event) => {
   event.preventDefault();

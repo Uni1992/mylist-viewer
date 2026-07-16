@@ -394,7 +394,7 @@ button { transition: transform .25s var(--spring), background .2s var(--ease), c
 .facet-row { display: grid; grid-template-columns: 72px 1fr; align-items: start; gap: 10px; margin-bottom: 14px; }
 .facet-label { padding-top: 7px; color: var(--muted); font-size: 11px; font-weight: 800; letter-spacing: .05em; }
 .facet-chips { display: flex; flex-wrap: wrap; gap: 7px; }
-.facet-genre .facet-chips { max-height: 120px; overflow-y: auto; }
+/* ジャンルも小窓スクロールにせず、全チップを折り返して表示する */
 .facet-chip {
   display: inline-flex;
   align-items: center;
@@ -701,10 +701,18 @@ button { transition: transform .25s var(--spring), background .2s var(--ease), c
   font-weight: 750;
 }
 
-/* ---------- サービスロゴ（白モノクロで統一） ---------- */
-.svc-logo { height: 15px; width: auto; max-width: 92px; filter: brightness(0) invert(1); opacity: .95; }
-.service-card .svc-logo { height: 14px; }
-.svc-chip img.mono { filter: brightness(0) invert(1); border-radius: 0; }
+/* ---------- サービスロゴ（白マスク方式・iOS Safariでも確実に描画される） ---------- */
+.logo-mask {
+  display: inline-block;
+  flex: none;
+  background: #f6f4ef;
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+  -webkit-mask-size: contain;
+  mask-size: contain;
+  -webkit-mask-position: center left;
+  mask-position: center left;
+}
 
 /* ---------- Tab bar ---------- */
 .tabbar {
@@ -792,7 +800,6 @@ dialog::backdrop { background: #05050acc; backdrop-filter: blur(6px); }
   color: var(--ink);
 }
 .svc-chip:active { transform: scale(.95); }
-.svc-chip .wordmark-logo { height: 14px; width: auto; max-width: 96px; filter: brightness(0) invert(1); opacity: .95; }
 .svc-chip b { font-size: 13px; font-weight: 800; }
 .svc-chip small { color: var(--faint); font-size: 10.5px; font-weight: 700; }
 .svc-netflix { color: #ff5b5b; }
