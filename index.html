@@ -183,6 +183,11 @@
       </section>
     </div>
 
+    <!-- 現在の絞り込み条件と該当件数（Libraryで常時表示） -->
+    <div id="countPill" class="count-pill" hidden>
+      <span id="cpConds"></span><b id="cpNum"></b>
+    </div>
+
     <!-- ============ BOTTOM NAV ============ -->
     <nav class="tabbar" aria-label="ナビゲーション">
       <button class="tab is-active" type="button" data-view="home"><span class="tab-ico">⌂</span><span>Home</span></button>
@@ -237,6 +242,7 @@
         <span class="poster-wrap">
           <img class="poster" alt="" loading="lazy" referrerpolicy="no-referrer" />
           <span class="poster-fav" hidden>★</span>
+          <span class="poster-watched" hidden>✓ 視聴済み</span>
           <span class="poster-badge" hidden></span>
         </span>
         <span class="poster-title"></span>

@@ -66,8 +66,48 @@ const SERVICE_SEARCH = {
 const F = {
   query: "", mediaType: "", service: "", genre: "", duration: "",
   watchState: "", maxRuntime: 0, minRating: 0, expiringSoon: false,
+  decade: "", country: "",
   sort: "added"
 };
+
+// 同梱しているサービスロゴ（白モノクロ表示用）
+const SERVICE_LOGOS = {
+  netflix: "logos/netflix.svg",
+  prime: "logos/prime.svg",
+  disney: "logos/disney.svg",
+  appletv: "logos/appletv.svg",
+  unext: "logos/unext.svg"
+};
+function serviceLogoImg(key, className = "svc-logo") {
+  if (!SERVICE_LOGOS[key]) return null;
+  const img = document.createElement("img");
+  img.src = SERVICE_LOGOS[key];
+  img.alt = serviceLabel(key);
+  img.className = className;
+  return img;
+}
+
+// 公開年→年代
+const DECADE_LABELS = { "2020s": "2020年代", "2010s": "2010年代", "2000s": "2000年代", "1990s": "90年代", "1980s": "80年代", older: "それ以前" };
+function decadeKey(year) {
+  if (!Number.isFinite(year)) return "";
+  if (year >= 2020) return "2020s";
+  if (year >= 2010) return "2010s";
+  if (year >= 2000) return "2000s";
+  if (year >= 1990) return "1990s";
+  if (year >= 1980) return "1980s";
+  return "older";
+}
+
+// 制作国コード→日本語（TMDB補完v7で item.countries に入る）
+const COUNTRY_LABELS = {
+  US: "アメリカ", JP: "日本", FR: "フランス", KR: "韓国", GB: "イギリス", DE: "ドイツ",
+  IT: "イタリア", ES: "スペイン", CN: "中国", HK: "香港", TW: "台湾", IN: "インド",
+  CA: "カナダ", AU: "オーストラリア", TH: "タイ", SE: "スウェーデン", DK: "デンマーク",
+  MX: "メキシコ", BR: "ブラジル", RU: "ロシア", IE: "アイルランド", NZ: "ニュージーランド",
+  BE: "ベルギー", NL: "オランダ", PL: "ポーランド", AR: "アルゼンチン", IR: "イラン"
+};
+function countryLabel(code) { return COUNTRY_LABELS[code] || code; }
 
 const sampleItems = [
   { id: "sample-1", title: "雨の日に観たいサスペンス", runtime: 96, year: 2019, genres: ["サスペンス", "洋画"], tags: ["雨の日"], note: "サンプル作品です。JSONを読み込むと置き換わります。", service: "unext", mediaType: "movie", rating: 7.8, imdbRating: "7.6", watched: false, favorite: true, url: "https://video.unext.jp/", access: "見放題" },
@@ -195,6 +235,8 @@ function matches(item) {
   if (F.duration && durationKey(item.runtime) !== F.duration) return false;
   if (F.maxRuntime && (!Number.isFinite(item.runtime) || item.runtime > F.maxRuntime)) return false;
   if (F.minRating && bestRating(item) < F.minRating) return false;
+  if (F.decade && decadeKey(item.year) !== F.decade) return false;
+  if (F.country && !(item.countries || []).includes(F.country)) return false;
   if (F.expiringSoon) { const d = daysUntil(item.expiresAt); if (d === null || d > 30) return false; }
   if (F.watchState === "unwatched" && item.watched) return false;
   if (F.watchState === "watched" && !item.watched) return false;
@@ -216,8 +258,9 @@ function applyFilters() {
   state.filtered = state.items.filter(matches).sort(sorter(F.sort));
   return state.filtered;
 }
+const F_DEFAULTS = { query: "", mediaType: "", service: "", genre: "", duration: "", watchState: "", maxRuntime: 0, minRating: 0, expiringSoon: false, decade: "", country: "", sort: "added" };
 function resetFilters() {
-  Object.assign(F, { query: "", mediaType: "", service: "", genre: "", duration: "", watchState: "", maxRuntime: 0, minRating: 0, expiringSoon: false, sort: "added" });
+  Object.assign(F, F_DEFAULTS);
 }
 
 /* ============ 保存・更新 ============ */
@@ -242,6 +285,7 @@ function showView(name) {
   state.currentView = name;
   $$(".view").forEach((el) => { el.hidden = el.dataset.view !== name; });
   $$(".tab").forEach((tab) => tab.classList.toggle("is-active", tab.dataset.view === name));
+  $("#countPill").hidden = name !== "library";
   views[name]();
 }
 function renderAll() {
@@ -303,7 +347,15 @@ function renderHome() {
     const card = document.createElement("button");
     card.type = "button";
     card.className = "service-card";
-    card.innerHTML = `<span class="sc-name svc-${key}">${serviceShort[key] || serviceLabel(key)}</span><span class="sc-count">${count}</span>`;
+    // 公式ロゴ（白モノクロ）で表示。ロゴが無いサービスはテキスト
+    const logo = serviceLogoImg(key);
+    const name = document.createElement("span");
+    name.className = `sc-name svc-${key}`;
+    if (logo) name.append(logo); else name.textContent = serviceShort[key] || serviceLabel(key);
+    const num = document.createElement("span");
+    num.className = "sc-count";
+    num.textContent = count;
+    card.append(name, num);
     card.addEventListener("click", () => { resetFilters(); F.service = key; showView("library"); });
     svcBox.append(card);
   });
@@ -340,7 +392,24 @@ let libDensity = localStorage.getItem("tonite-density") || "grid";
 let facetsOpen = false;
 
 function hasActiveFilters() {
-  return Boolean(F.query || F.mediaType || F.service || F.genre || F.duration || F.watchState || F.maxRuntime || F.minRating || F.expiringSoon);
+  return Boolean(F.query || F.mediaType || F.service || F.genre || F.duration || F.watchState || F.maxRuntime || F.minRating || F.expiringSoon || F.decade || F.country);
+}
+
+// いまの絞り込み条件を短いラベル列にする（件数ピル用）
+function activeConditionLabels() {
+  const out = [];
+  if (F.query) out.push(`"${F.query}"`);
+  if (F.service) out.push(serviceShort[F.service] || serviceLabel(F.service));
+  if (F.mediaType) out.push(mediaLabels[F.mediaType]);
+  if (F.watchState) out.push({ unwatched: "未視聴", watched: "視聴済み", favorite: "お気に入り" }[F.watchState]);
+  if (F.genre) out.push(F.genre);
+  if (F.duration) out.push({ short: "80分未満", around90: "90分前後", around120: "120分前後", long: "140分以上", unknown: "時間不明" }[F.duration]);
+  if (F.maxRuntime) out.push(`${F.maxRuntime}分以内`);
+  if (F.minRating) out.push(`評価${F.minRating}+`);
+  if (F.decade) out.push(DECADE_LABELS[F.decade]);
+  if (F.country) out.push(countryLabel(F.country));
+  if (F.expiringSoon) out.push("終了間近");
+  return out;
 }
 
 function renderLibrary() {
@@ -388,6 +457,11 @@ function renderLibrary() {
   state.filtered.forEach((item) => grid.append(createPosterCard(item)));
   $("#libCount").textContent = `${state.filtered.length}件`;
   $("#libEmpty").hidden = state.filtered.length > 0 || state.items.length === 0;
+
+  // 件数ピル: 「Netflix・映画・90分前後 → 18作品」を常時表示
+  const conds = activeConditionLabels();
+  $("#cpConds").textContent = conds.length ? `${conds.join("・")} → ` : `全ライブラリ `;
+  $("#cpNum").textContent = `${state.filtered.length}作品`;
 }
 
 function renderFacets() {
@@ -438,6 +512,27 @@ function renderFacets() {
     { value: "long", label: "140分以上", count: countDur("long") }
   ], F.duration, (v) => { F.duration = v; F.maxRuntime = 0; });
 
+  const countRating = (v) => state.items.filter((i) => bestRating(i) >= v).length;
+  mkRow("評価", "rating", [
+    { value: 7, label: "7.0+", count: countRating(7) },
+    { value: 7.5, label: "7.5+", count: countRating(7.5) },
+    { value: 8, label: "8.0+", count: countRating(8) },
+    { value: 8.5, label: "8.5+", count: countRating(8.5) }
+  ], F.minRating, (v) => { F.minRating = v || 0; });
+
+  const countDecade = (v) => state.items.filter((i) => decadeKey(i.year) === v).length;
+  mkRow("公開年", "decade", ["2020s", "2010s", "2000s", "1990s", "1980s", "older"]
+    .map((d) => ({ value: d, label: DECADE_LABELS[d], count: countDecade(d) }))
+    .filter((o) => o.count > 0), F.decade, (v) => { F.decade = v; });
+
+  // 国: ライブラリに存在する制作国を件数順で（TMDB補完v7以降のデータ）
+  const countryCounts = {};
+  state.items.forEach((i) => (i.countries || []).forEach((c) => { countryCounts[c] = (countryCounts[c] || 0) + 1; }));
+  const countries = Object.entries(countryCounts).sort((a, b) => b[1] - a[1]).slice(0, 12);
+  if (countries.length) {
+    mkRow("国", "country", countries.map(([code, count]) => ({ value: code, label: countryLabel(code), count })), F.country, (v) => { F.country = v; });
+  }
+
   const genres = [...new Set(state.items.flatMap(itemGenres))].sort((a, b) => a.localeCompare(b, "ja"));
   if (genres.length) mkRow("ジャンル", "genre", genres.map((g) => ({ value: g, label: g, count: countGenre(g) })), F.genre, (v) => { F.genre = v; });
 }
@@ -474,7 +569,7 @@ function renderSavedViews() {
     btn.type = "button";
     btn.style.cssText = "border:0;background:transparent;color:inherit;font:inherit;padding:0;";
     btn.textContent = sv.name;
-    btn.addEventListener("click", () => { Object.assign(F, { query: "", mediaType: "", service: "", genre: "", duration: "", watchState: "", maxRuntime: 0, minRating: 0, expiringSoon: false, sort: "added" }, sv.filter); renderLibrary(); });
+    btn.addEventListener("click", () => { Object.assign(F, F_DEFAULTS, sv.filter); renderLibrary(); });
     const del = document.createElement("button");
     del.type = "button";
     del.className = "sv-del";
@@ -499,6 +594,7 @@ function createPosterCard(item) {
     else poster.removeAttribute("src");
   });
   if (item.favorite) $(".poster-fav", card).hidden = false;
+  if (item.watched) $(".poster-watched", card).hidden = false;
   const badge = $(".poster-badge", card);
   const rating = bestRating(item);
   const remain = item.expiresAt ? daysUntil(item.expiresAt) : null;
@@ -637,7 +733,15 @@ function renderSettings() {
     const count = svcCounts[key] || 0;
     const row = document.createElement("div");
     row.className = "settings-row";
-    row.innerHTML = `<span class="settings-label"><span class="settings-dot ${count ? "on" : ""}"></span>${serviceLabel(key)}</span><span class="settings-value">${count ? `${count}作品` : "未接続"}</span>`;
+    const label = document.createElement("span");
+    label.className = "settings-label";
+    const dot = document.createElement("span");
+    dot.className = `settings-dot ${count ? "on" : ""}`;
+    label.append(dot, serviceLogoImg(key) || serviceLabel(key));
+    const value = document.createElement("span");
+    value.className = "settings-value";
+    value.textContent = count ? `${count}作品` : "未接続";
+    row.append(label, value);
     box.append(row);
   });
   const cfg = GistSync.getConfig();
@@ -704,11 +808,14 @@ function openDetail(item) {
       chip.target = "_blank";
       chip.rel = "noreferrer";
       chip.href = svc.key === own && item.url ? item.url : (SERVICE_SEARCH[svc.key]?.(item.title) || item.providers?.link || "#");
-      if (svc.logo) {
+      // TMDBのカラーロゴがあればそれを、無ければ同梱の白モノクロロゴを表示
+      const logoSrc = svc.logo || SERVICE_LOGOS[svc.key] || null;
+      if (logoSrc) {
         const img = document.createElement("img");
-        img.src = svc.logo;
+        img.src = logoSrc;
         img.alt = "";
         img.referrerPolicy = "no-referrer";
+        if (!svc.logo) img.className = "mono";
         chip.append(img);
       }
       const name = document.createElement("b");

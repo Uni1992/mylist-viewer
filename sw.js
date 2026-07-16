@@ -1,4 +1,4 @@
-const cacheName = "tonite-viewer-v16";
+const cacheName = "tonite-viewer-v17";
 const assets = [
   "./",
   "./index.html",
@@ -8,7 +8,12 @@ const assets = [
   "./favicon-32.png",
   "./apple-touch-icon.png",
   "./icon-192.png",
-  "./icon-512.png"
+  "./icon-512.png",
+  "./logos/netflix.svg",
+  "./logos/prime.svg",
+  "./logos/disney.svg",
+  "./logos/appletv.svg",
+  "./logos/unext.svg"
 ];
 
 self.addEventListener("install", (event) => {
