@@ -2,7 +2,7 @@ const $ = (selector, root = document) => root.querySelector(selector);
 const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
 
 // 設定画面に表示するアプリ版数。デプロイのたびに上げ、実機で更新が届いたか確認できるようにする
-const APP_VERSION = "3.5.0";
+const APP_VERSION = "3.6.0";
 
 const storageKey = "streaming-mobile-viewer-items";
 const legacyStorageKey = "unext-mobile-viewer-items";
@@ -944,11 +944,25 @@ const GistSync = (() => {
   const stateStamp = (item) => Date.parse(item?.stateUpdatedAt || "") || 0;
   const importedStamp = (item) => Date.parse(item?.importedAt || "") || 0;
 
-  function getConfig() {
-    try { const c = JSON.parse(localStorage.getItem(syncConfigKey) || "{}"); return c && typeof c === "object" ? c : {}; }
-    catch { return {}; }
+  // トークン/Gist IDに紛れ込んだ全角文字・改行・ゼロ幅文字を除去する。
+  // 不正な文字が1つでもあるとfetchがヘッダー組み立てで失敗し「ネットワークエラー」に見える
+  function sanitizeCredential(value) {
+    return String(value || "").normalize("NFKC").replace(/[^\x21-\x7e]/g, "");
   }
-  function setConfig(config) { localStorage.setItem(syncConfigKey, JSON.stringify(config)); }
+  function getConfig() {
+    try {
+      const c = JSON.parse(localStorage.getItem(syncConfigKey) || "{}");
+      if (!c || typeof c !== "object") return {};
+      return { ...c, token: sanitizeCredential(c.token), gistId: sanitizeCredential(c.gistId) };
+    } catch { return {}; }
+  }
+  function setConfig(config) {
+    localStorage.setItem(syncConfigKey, JSON.stringify({
+      ...config,
+      token: sanitizeCredential(config.token),
+      gistId: sanitizeCredential(config.gistId)
+    }));
+  }
   function setStatus(message, isError = false) {
     const status = $("#syncStatus");
     status.hidden = !message;
@@ -1035,12 +1049,19 @@ const GistSync = (() => {
       if (state.currentView === "settings") renderSettings();
     } catch (error) {
       let friendly = friendlySyncError(error.message);
-      // ネットワークエラーの場合、GitHub自体への疎通を実測して原因を切り分ける
+      // ネットワークエラーに見える場合、段階的に切り分ける:
+      // ①認証なしで同じGist URLに届くか → 届くなら失敗要因はトークンのヘッダー組み立て
+      // ②GitHub自体に届くか → 届かなければ本当にネットワーク不通
       if (/ネットワークに接続できません/.test(friendly)) {
         try {
-          const probe = await fetch("https://api.github.com/zen", { cache: "no-store" });
-          if (probe.ok) friendly = "GitHubには届いていますが同期リクエストが失敗しました。トークンとGist IDを確認し、もう一度お試しください";
-        } catch { /* 本当にネットワーク不通 */ }
+          await fetch(`${GIST_API}/${getConfig().gistId}`, { cache: "no-store" });
+          friendly = "トークンの文字列に問題がある可能性があります（コピー時の余分な文字など）。設定でトークンを入力し直してください";
+        } catch {
+          try {
+            const probe = await fetch("https://api.github.com/zen", { cache: "no-store" });
+            if (probe.ok) friendly = "GitHubには届いていますが同期リクエストが失敗しました。Gist IDを確認し、もう一度お試しください";
+          } catch { /* 本当にネットワーク不通 */ }
+        }
       }
       setConfig({ ...getConfig(), lastError: friendly, lastErrorAt: new Date().toISOString() });
       setStatus(`同期に失敗しました: ${friendly}`, true);

@@ -749,8 +749,9 @@ button { transition: transform .25s var(--spring), background .2s var(--ease), c
 
 /* ---------- Dialogs ---------- */
 dialog {
-  width: min(100% - 22px, 520px);
-  max-height: calc(100dvh - 24px);
+  /* 画面を覆い尽くさないよう、幅・高さともに余白を残したコンパクトなカードにする */
+  width: min(100% - 44px, 440px);
+  max-height: 76dvh;
   padding: 0;
   border: 1px solid #34343a;
   border-radius: 20px;
@@ -777,9 +778,9 @@ dialog::backdrop { background: #05050acc; backdrop-filter: blur(6px); }
   line-height: 1;
 }
 .dialog-close:hover { background: #000000cc; }
-.detail-card { max-height: calc(100dvh - 24px); overflow: auto; padding: 18px; }
-.detail-card img { width: 100%; max-height: 50dvh; border-radius: 14px; background: var(--surface-3); object-fit: cover; }
-.detail-card h2 { margin: 14px 0 6px; font-size: 24px; font-weight: 900; }
+.detail-card { max-height: 76dvh; overflow: auto; padding: 16px; }
+.detail-card img { width: 100%; max-height: 32dvh; border-radius: 14px; background: var(--surface-3); object-fit: cover; }
+.detail-card h2 { margin: 12px 0 6px; font-size: 21px; font-weight: 900; }
 .detail-card p { color: var(--muted); line-height: 1.75; }
 .detail-card .detail-meta { margin: 2px 0 8px; font-size: 12px; letter-spacing: .03em; }
 .detail-card .detail-ratings-line { margin: 0 0 6px; color: #f5c518; font-size: 14px; font-weight: 800; }
