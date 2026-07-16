@@ -66,36 +66,25 @@ button { transition: transform .25s var(--spring), background .2s var(--ease), c
   position: relative;
 }
 .brand { display: flex; align-items: center; gap: 12px; min-width: 0; }
-.logo-mark {
-  position: relative;
-  display: grid;
-  place-items: center;
-  width: 46px;
-  height: 46px;
-  border-radius: 13px;
-  background: var(--accent);
-  box-shadow: 0 6px 22px color-mix(in srgb, var(--accent) 34%, transparent);
-  flex: none;
-}
-.logo-mark b {
-  font-size: 26px;
-  font-weight: 900;
-  color: var(--accent-ink);
-  letter-spacing: -.04em;
-  transform: translateX(-2px);
-}
-.logo-mark i {
-  position: absolute;
-  top: 9px;
-  right: 9px;
-  width: 5px;
-  height: 26px;
-  border-radius: 2px;
-  background: repeating-linear-gradient(to bottom, var(--accent-ink) 0 3px, transparent 3px 6px);
-}
 .brand-text { display: flex; flex-direction: column; min-width: 0; }
-.brand-name { font-size: 20px; font-weight: 900; letter-spacing: .14em; }
-.brand-count { color: var(--muted); font-size: 12px; margin-top: 2px; }
+.wordmark {
+  display: inline-flex;
+  align-items: baseline;
+  font-size: 28px;
+  font-weight: 600;
+  letter-spacing: -.045em;
+  color: var(--ink);
+  line-height: 1;
+  user-select: none;
+}
+.wordmark .wm-o {
+  height: .56em;
+  width: .56em;
+  align-self: baseline;
+  margin: 0 .015em;
+  overflow: visible;
+}
+.brand-count { color: var(--muted); font-size: 12px; margin-top: 6px; }
 .brand-count strong { color: var(--ink); font-weight: 800; }
 
 .view-title { font-size: 26px; font-weight: 900; letter-spacing: -.01em; }
