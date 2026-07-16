@@ -177,7 +177,7 @@ button { transition: transform .25s var(--spring), background .2s var(--ease), c
 /* ---------- Home: media type cards ---------- */
 .media-grid {
   display: grid;
-  grid-template-columns: repeat(2, 1fr);
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 10px;
   margin-top: 14px;
 }
@@ -439,7 +439,9 @@ button { transition: transform .25s var(--spring), background .2s var(--ease), c
 /* ---------- Poster grid ---------- */
 .poster-grid {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  /* minmax(0,1fr): 中身の幅（長い題名・画像）に列が引っ張られて
+     1列目だけ大きくなる「grid blowout」を防ぎ、3列を厳密に等幅にする */
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 12px 10px;
 }
 .poster-grid.is-list { grid-template-columns: 1fr; gap: 10px; }
@@ -452,6 +454,8 @@ button { transition: transform .25s var(--spring), background .2s var(--ease), c
   background: transparent;
   color: var(--ink);
   text-align: left;
+  min-width: 0;
+  width: 100%;
 }
 .poster-card:active { transform: scale(.96); }
 .poster-wrap {
@@ -651,14 +655,21 @@ button { transition: transform .25s var(--spring), background .2s var(--ease), c
 .empty p { margin: 0; color: var(--muted); line-height: 1.7; font-size: 13px; }
 .empty-mark { font-size: 40px; margin-bottom: 8px; }
 
-/* ---------- 件数行（Libraryヘッダー直下に常時表示） ---------- */
+/* ---------- 件数表示（Libraryヘッダー直下・中央のスペシャルピル） ---------- */
 .lib-count {
   display: flex;
   align-items: center;
-  gap: 8px;
-  min-height: 34px;
-  margin: 0 18px 6px;
-  padding: 0 2px;
+  justify-content: center;
+  gap: 9px;
+  width: fit-content;
+  max-width: calc(100% - 36px);
+  min-height: 40px;
+  margin: 2px auto 10px;
+  padding: 0 18px;
+  border: 1px solid color-mix(in srgb, var(--accent) 45%, transparent);
+  border-radius: 999px;
+  background: linear-gradient(135deg, color-mix(in srgb, var(--accent) 14%, var(--surface)), var(--surface));
+  box-shadow: 0 4px 18px color-mix(in srgb, var(--accent) 18%, transparent), inset 0 1px 0 #ffffff12;
 }
 .lib-count span {
   flex: 0 1 auto;
@@ -666,19 +677,25 @@ button { transition: transform .25s var(--spring), background .2s var(--ease), c
   overflow: hidden;
   color: var(--muted);
   font-size: 12px;
-  font-weight: 700;
+  font-weight: 750;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.lib-count b { color: var(--accent); font-size: 15px; font-weight: 900; white-space: nowrap; }
+.lib-count b {
+  color: var(--accent);
+  font-size: 17px;
+  font-weight: 900;
+  letter-spacing: -.01em;
+  white-space: nowrap;
+  text-shadow: 0 0 18px color-mix(in srgb, var(--accent) 45%, transparent);
+}
 .lib-count button {
   flex: none;
-  margin-left: auto;
-  min-height: 28px;
+  min-height: 26px;
   padding: 0 10px;
-  border: 1px solid var(--line);
+  border: 1px solid color-mix(in srgb, var(--accent) 30%, var(--line));
   border-radius: 999px;
-  background: var(--surface);
+  background: transparent;
   color: var(--muted);
   font-size: 11px;
   font-weight: 750;
@@ -775,7 +792,7 @@ dialog::backdrop { background: #05050acc; backdrop-filter: blur(6px); }
   color: var(--ink);
 }
 .svc-chip:active { transform: scale(.95); }
-.svc-chip img { width: 20px; height: 20px; border-radius: 5px; }
+.svc-chip .wordmark-logo { height: 14px; width: auto; max-width: 96px; filter: brightness(0) invert(1); opacity: .95; }
 .svc-chip b { font-size: 13px; font-weight: 800; }
 .svc-chip small { color: var(--faint); font-size: 10.5px; font-weight: 700; }
 .svc-netflix { color: #ff5b5b; }
@@ -845,9 +862,9 @@ dialog::backdrop { background: #05050acc; backdrop-filter: blur(6px); }
 @media (min-width: 620px) {
   .scroll { padding-left: max(18px, calc(50vw - 300px)); padding-right: max(18px, calc(50vw - 300px)); }
   .home-top, .view-top { padding-left: max(18px, calc(50vw - 300px)); padding-right: max(18px, calc(50vw - 300px)); }
-  .lib-count { margin-left: max(18px, calc(50vw - 300px)); margin-right: max(18px, calc(50vw - 300px)); }
-  .poster-grid { grid-template-columns: repeat(4, 1fr); }
-  .media-grid { grid-template-columns: repeat(4, 1fr); }
+  .lib-count { margin-left: auto; margin-right: auto; }
+  .poster-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  .media-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
 }
 @media (prefers-reduced-motion: reduce) {
   * { animation: none !important; transition: none !important; }

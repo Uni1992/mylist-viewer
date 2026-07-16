@@ -2,7 +2,7 @@ const $ = (selector, root = document) => root.querySelector(selector);
 const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
 
 // 設定画面に表示するアプリ版数。デプロイのたびに上げ、実機で更新が届いたか確認できるようにする
-const APP_VERSION = "3.3.0";
+const APP_VERSION = "3.4.0";
 
 const storageKey = "streaming-mobile-viewer-items";
 const legacyStorageKey = "unext-mobile-viewer-items";
@@ -209,9 +209,10 @@ function itemGenres(item) {
   return [...new Set((item.genres || []).map(canonGenre).filter(Boolean))];
 }
 function posterOf(item) {
+  // 手動指定は最優先。それ以外は縦型が保証されるTMDBポスターを原則採用し、
+  // 無い作品だけサービス側の画像（横長のog:imageが混ざる）で代用する
   if (item.imageLocked) return item.image || "";
-  if (serviceKey(item) === "prime" && item.tmdbImage) return item.tmdbImage;
-  return item.image || item.tmdbImage || "";
+  return item.tmdbImage || item.image || "";
 }
 function searchable(item) {
   return [item.title, item.note, item.description, item.director, ...(item.cast || []), ...(item.tags || []), ...(item.genres || [])]
@@ -515,6 +516,12 @@ function renderFacets() {
     { value: "unknown", label: "未分類", count: countMedia("unknown") }
   ], F.mediaType, (v) => { F.mediaType = v; });
 
+  const countSvc = (key) => countNarrowed(["service"], (i) => serviceKey(i) === key);
+  const svcKeys = [...new Set(state.items.map(serviceKey))].sort((a, b) => countSvc(b) - countSvc(a));
+  if (svcKeys.length) {
+    mkRow("サービス", "service", svcKeys.map((key) => ({ value: key, label: serviceShort[key] || serviceLabel(key), count: countSvc(key) })), F.service, (v) => { F.service = v; });
+  }
+
   mkRow("視聴状態", "watch", [
     { value: "", label: "すべて" },
     { value: "unwatched", label: "未視聴", count: countWatch("unwatched") },
@@ -607,6 +614,12 @@ function createPosterCard(item) {
   poster.addEventListener("error", () => {
     if (item.tmdbImage && poster.src !== item.tmdbImage) poster.src = item.tmdbImage;
     else poster.removeAttribute("src");
+  });
+  // 横長画像が紛れ込んだら縦型のTMDBポスターに自動で差し替える
+  poster.addEventListener("load", () => {
+    if (poster.naturalWidth > poster.naturalHeight && item.tmdbImage && !poster.src.includes("image.tmdb.org")) {
+      poster.src = item.tmdbImage;
+    }
   });
   if (item.favorite) $(".poster-fav", card).hidden = false;
   if (item.watched) $(".poster-watched", card).hidden = false;
@@ -760,7 +773,14 @@ function renderSettings() {
     box.append(row);
   });
   const cfg = GistSync.getConfig();
-  $("#settingsSyncState").textContent = cfg.token && cfg.gistId ? "接続済み" : "未設定";
+  // 最終同期の状態を表示: エラーがあれば内容、成功していれば時刻
+  let syncState = "未設定";
+  if (cfg.token && cfg.gistId) {
+    if (cfg.lastError) syncState = `⚠ ${cfg.lastError}`;
+    else if (cfg.lastSyncAt) syncState = `最終同期 ${new Date(cfg.lastSyncAt).toLocaleString("ja-JP", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" })}`;
+    else syncState = "接続済み";
+  }
+  $("#settingsSyncState").textContent = syncState;
   $(".settings-foot").textContent = `TONITE v${APP_VERSION} · あなたの映画ライブラリ`;
 }
 
@@ -820,26 +840,26 @@ function openDetail(item) {
     row.className = "svc-chips";
     services.forEach((svc) => {
       const chip = document.createElement("a");
-      chip.className = `svc-chip svc-border-${svc.key}`;
+      chip.className = "svc-chip";
       chip.target = "_blank";
       chip.rel = "noreferrer";
+      chip.setAttribute("aria-label", `${svc.label}で観る（${svc.kind}）`);
       chip.href = svc.key === own && item.url ? item.url : (SERVICE_SEARCH[svc.key]?.(item.title) || item.providers?.link || "#");
-      // TMDBのカラーロゴがあればそれを、無ければ同梱の白モノクロロゴを表示
-      const logoSrc = svc.logo || SERVICE_LOGOS[svc.key] || null;
-      if (logoSrc) {
+      // PCのファセットと同じ、横長の公式ワードマークロゴで統一する
+      if (SERVICE_LOGOS[svc.key]) {
         const img = document.createElement("img");
-        img.src = logoSrc;
-        img.alt = "";
-        img.referrerPolicy = "no-referrer";
-        if (!svc.logo) img.className = "mono";
+        img.src = SERVICE_LOGOS[svc.key];
+        img.alt = svc.label;
+        img.className = "wordmark-logo";
         chip.append(img);
+      } else {
+        const name = document.createElement("b");
+        name.textContent = svc.label;
+        chip.append(name);
       }
-      const name = document.createElement("b");
-      name.className = `svc-${svc.key}`;
-      name.textContent = svc.label;
       const kind = document.createElement("small");
       kind.textContent = svc.kind;
-      chip.append(name, kind);
+      chip.append(kind);
       row.append(chip);
     });
     content.append(row);
@@ -931,6 +951,16 @@ const GistSync = (() => {
     status.textContent = message || "";
     status.classList.toggle("is-error", isError);
   }
+
+  // 同期エラーを原因別のわかりやすい日本語にする
+  function friendlySyncError(message) {
+    const raw = String(message || "");
+    if (/401/.test(raw)) return "GitHubトークンが無効か期限切れです。新しいトークンを作成して設定に保存してください";
+    if (/404/.test(raw)) return "Gistが見つかりません。Gist IDが正しいか確認してください";
+    if (/403/.test(raw)) return "GitHubに拒否されました（レート制限の可能性）。しばらくしてからもう一度";
+    if (/Failed to fetch|Load failed|NetworkError|abort/i.test(raw)) return "ネットワークに接続できません。電波の良い場所で「いま同期する」を試してください";
+    return raw;
+  }
   function normalizePayload(raw) {
     if (!raw || typeof raw !== "object") return { items: [], deleted: {} };
     const items = Array.isArray(raw) ? raw : Array.isArray(raw.items) ? raw.items : [];
@@ -995,9 +1025,14 @@ const GistSync = (() => {
         body: JSON.stringify({ files: { [GIST_FILE]: { content } } })
       });
       if (!patch.ok) throw new Error(`HTTP ${patch.status}`);
+      setConfig({ ...getConfig(), lastSyncAt: new Date().toISOString(), lastError: null });
       setStatus(`同期完了（${state.items.length}作品・${new Date().toLocaleTimeString("ja-JP", { hour: "2-digit", minute: "2-digit" })}）`);
+      if (state.currentView === "settings") renderSettings();
     } catch (error) {
-      setStatus(`同期に失敗しました: ${error.message}`, true);
+      const friendly = friendlySyncError(error.message);
+      setConfig({ ...getConfig(), lastError: friendly, lastErrorAt: new Date().toISOString() });
+      setStatus(`同期に失敗しました: ${friendly}`, true);
+      if (state.currentView === "settings") renderSettings();
     } finally {
       syncing = false;
     }
