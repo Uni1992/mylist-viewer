@@ -1,10 +1,10 @@
 {
-  "name": "配信マイリスト Safariビューア",
-  "short_name": "My List",
+  "name": "TONITE — あなたの映画ライブラリ",
+  "short_name": "TONITE",
   "start_url": "./index.html",
   "display": "standalone",
-  "background_color": "#101114",
-  "theme_color": "#101114",
+  "background_color": "#0b0b0b",
+  "theme_color": "#0b0b0b",
   "lang": "ja",
   "icons": []
 }

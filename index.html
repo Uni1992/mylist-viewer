@@ -3,131 +3,204 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-    <meta name="theme-color" content="#101114" />
+    <meta name="theme-color" content="#0b0b0b" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
-    <meta name="apple-mobile-web-app-title" content="U-NEXT List" />
+    <meta name="apple-mobile-web-app-title" content="TONITE" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-    <title>配信マイリスト Safariビューア</title>
+    <title>TONITE — あなたの映画ライブラリ</title>
     <link rel="manifest" href="manifest.webmanifest" />
     <link rel="stylesheet" href="styles.css" />
   </head>
   <body>
-    <main class="app-shell">
-      <header class="topbar">
-        <a class="logo" href="#" aria-label="トップ">
-          <span class="logo-mark">ML</span>
-          <b>MY LIST<br />BROWSER</b>
-        </a>
-        <button id="moreButton" class="icon-btn" type="button" aria-label="メニュー">•••</button>
-        <div id="moreMenu" class="menu" hidden>
-          <button id="syncButton" type="button">同期の設定</button>
-          <label for="importJson">JSONを読み込む</label>
-          <input id="importJson" type="file" accept="application/json,.json" hidden />
-          <button id="exportJson" type="button">JSONを書き出す</button>
-          <button id="loadSample" type="button">サンプルを表示</button>
-          <button id="clearFilters" type="button">絞り込みをリセット</button>
-          <hr />
-          <button id="clearAll" class="danger" type="button">この端末のデータを削除</button>
-        </div>
-      </header>
+    <div class="app">
+      <!-- ============ HOME ============ -->
+      <section class="view" data-view="home">
+        <header class="home-top">
+          <div class="brand">
+            <span class="logo-mark" aria-hidden="true"><b>T</b><i></i></span>
+            <div class="brand-text">
+              <span class="brand-name">TONITE</span>
+              <span class="brand-count"><strong id="homeCount">0</strong> 作品 · あなたのライブラリ</span>
+            </div>
+          </div>
+          <button id="moreButton" class="icon-btn" type="button" aria-label="メニュー">•••</button>
+          <div id="moreMenu" class="menu" hidden>
+            <button id="syncButton" type="button">同期の設定</button>
+            <label for="importJson">JSONを読み込む</label>
+            <input id="importJson" type="file" accept="application/json,.json" hidden />
+            <button id="exportJson" type="button">JSONを書き出す</button>
+            <button id="loadSample" type="button">サンプルを表示</button>
+            <hr />
+            <button id="clearAll" class="danger" type="button">この端末のデータを削除</button>
+          </div>
+        </header>
 
-      <p id="syncStatus" class="sync-status" role="status" hidden></p>
+        <p id="syncStatus" class="sync-status" role="status" hidden></p>
 
-      <label class="search-field">
-        <span class="search-icon">🔍</span>
-        <input id="query" type="search" placeholder="作品名・ジャンル・メモで探す" autocomplete="off" />
-      </label>
-      <p class="stat-line" aria-label="集計">
-        <strong id="totalCount">0</strong> 作品<span class="dot">·</span>
-        <strong id="unwatchedCount">0</strong> 未視聴<span class="dot">·</span>
-        平均 <strong id="averageRuntime">—</strong>
-      </p>
+        <div class="scroll" data-scroll="home">
+          <div id="homeMediaCards" class="media-grid"></div>
 
-      <button id="filterToggle" class="filter-toggle" type="button" aria-expanded="false" aria-controls="filtersPanel">
-        <span>絞り込み</span>
-        <small id="filterSummary">未視聴</small>
-      </button>
+          <div class="section-head">
+            <h2>Smart Collections</h2>
+          </div>
+          <div id="homeCollections" class="collection-list"></div>
 
-      <section id="filtersPanel" class="filters" aria-label="絞り込み">
-        <div class="facet-row" data-facet="mediaType">
-          <span class="facet-label">大ジャンル</span>
-          <div class="facet-chips" id="mediaFacets"></div>
-        </div>
-        <div class="facet-row" data-facet="service">
-          <span class="facet-label">サービス</span>
-          <div class="facet-chips" id="serviceFacets"></div>
-        </div>
-        <div class="facet-row" data-facet="watchState">
-          <span class="facet-label">視聴状態</span>
-          <div class="facet-chips" id="watchFacets"></div>
-        </div>
-        <div class="facet-row" data-facet="duration">
-          <span class="facet-label">上映時間</span>
-          <div class="facet-chips" id="durationFacets"></div>
-        </div>
-        <div class="facet-row facet-genre" data-facet="genre">
-          <span class="facet-label">ジャンル</span>
-          <div class="facet-chips" id="genreFacets"></div>
-        </div>
-        <label class="sort-field">
-          <span class="ctl-label">並び順</span>
-          <select id="sort">
-            <option value="added">追加順</option>
-            <option value="expiry">配信終了が近い順</option>
-            <option value="ratingDesc">評価が高い順</option>
-            <option value="backlog">積み順（古い順）</option>
-            <option value="title">タイトル順</option>
-            <option value="runtimeAsc">短い順</option>
-            <option value="runtimeDesc">長い順</option>
-            <option value="yearDesc">新しい順</option>
-          </select>
-        </label>
+          <div class="section-head">
+            <h2>サービス別</h2>
+          </div>
+          <div id="homeServices" class="service-row"></div>
 
-        <div class="hidden-controls" hidden aria-hidden="true">
-          <select id="mediaType">
-            <option value="">すべて</option>
-            <option value="movie">映画</option>
-            <option value="drama">ドラマシリーズ</option>
-            <option value="anime">アニメ</option>
-            <option value="unknown">未分類</option>
-          </select>
-          <select id="service"><option value="">すべて</option></select>
-          <select id="genre"><option value="">すべて</option></select>
-          <select id="watchState">
-            <option value="unwatched">未視聴</option>
-            <option value="">すべて</option>
-            <option value="watched">視聴済み</option>
-            <option value="favorite">お気に入り</option>
-          </select>
-          <select id="duration">
-            <option value="">すべて</option>
-            <option value="short">80分未満</option>
-            <option value="around90">90分前後</option>
-            <option value="around120">120分前後</option>
-            <option value="long">140分以上</option>
-            <option value="unknown">時間不明</option>
-          </select>
+          <div class="section-head">
+            <h2>今夜の一本</h2>
+            <button class="section-more" type="button" data-goto="picks">Picks へ</button>
+          </div>
+          <div id="homePick" class="home-pick"></div>
+
+          <div id="homeEmpty" class="empty" hidden>
+            <div class="empty-mark">🎬</div>
+            <h2>まだ作品がありません</h2>
+            <p>右上の「•••」から同期を設定するか、JSONを読み込むとライブラリが立ち上がります。</p>
+          </div>
         </div>
       </section>
 
-      <section class="results-head">
-        <h2 id="resultsTitle">未視聴の作品</h2>
-        <span id="filteredCount">0件</span>
+      <!-- ============ LIBRARY ============ -->
+      <section class="view" data-view="library" hidden>
+        <header class="view-top">
+          <h1 class="view-title">Library</h1>
+          <div class="view-tools">
+            <button id="densityToggle" class="icon-btn small" type="button" aria-label="表示切り替え">▦</button>
+          </div>
+        </header>
+
+        <div class="scroll" data-scroll="library">
+          <label class="search-field">
+            <span class="search-icon">🔍</span>
+            <input id="libQuery" type="search" placeholder="作品・監督・ジャンルで探す" autocomplete="off" />
+          </label>
+
+          <div class="quick-chips" id="libQuickChips"></div>
+
+          <div class="saved-views-block">
+            <div class="saved-views-head">
+              <span>保存ビュー</span>
+              <button id="saveViewBtn" type="button" class="link-btn">＋ 現在の絞り込みを保存</button>
+            </div>
+            <div id="savedViews" class="saved-views"></div>
+          </div>
+
+          <section id="libFacets" class="facets" hidden aria-label="詳細フィルター"></section>
+
+          <div class="results-head">
+            <span id="libCount">0件</span>
+            <label class="sort-field inline">
+              <select id="libSort">
+                <option value="added">追加順</option>
+                <option value="expiry">配信終了が近い順</option>
+                <option value="ratingDesc">評価が高い順</option>
+                <option value="backlog">積み順（古い順）</option>
+                <option value="title">タイトル順</option>
+                <option value="runtimeAsc">短い順</option>
+                <option value="runtimeDesc">長い順</option>
+                <option value="yearDesc">新しい順</option>
+              </select>
+            </label>
+          </div>
+
+          <div id="libGrid" class="poster-grid"></div>
+
+          <div id="libEmpty" class="empty" hidden>
+            <div class="empty-mark">🎞️</div>
+            <h2>条件に合う作品がありません</h2>
+            <p>チップをタップして絞り込みを変えてみてください。</p>
+          </div>
+        </div>
       </section>
 
-      <section id="library" class="library" aria-live="polite"></section>
-
-      <section id="empty" class="empty" hidden>
-        <div class="empty-mark">🎬</div>
-        <h2>まだ作品がありません</h2>
-        <p>右上の「•••」から同期を設定するか、JSONを読み込むと作品が表示されます。</p>
+      <!-- ============ SEARCH ============ -->
+      <section class="view" data-view="search" hidden>
+        <header class="view-top">
+          <h1 class="view-title">Search</h1>
+        </header>
+        <div class="scroll" data-scroll="search">
+          <label class="search-field big">
+            <span class="search-icon">🔍</span>
+            <input id="searchInput" type="search" placeholder="観たい気分、作品名、監督…" autocomplete="off" />
+          </label>
+          <div id="searchSuggest" class="suggest-block"></div>
+          <div id="searchResults" class="poster-grid"></div>
+        </div>
       </section>
-    </main>
 
-    <button id="pickButton" class="tonight-btn" type="button">
-      <span class="tonight-ico">🎬</span> 今夜の一本を選ぶ
-    </button>
+      <!-- ============ PICKS ============ -->
+      <section class="view" data-view="picks" hidden>
+        <header class="view-top">
+          <h1 class="view-title">今夜の一本</h1>
+          <div class="view-tools">
+            <button id="reshuffle" class="icon-btn small" type="button" aria-label="別の候補">⟳</button>
+          </div>
+        </header>
+        <div class="scroll" data-scroll="picks">
+          <div id="pickHero" class="pick-hero"></div>
+          <div class="section-head">
+            <h2>積み映画</h2>
+          </div>
+          <div id="backlogList" class="backlog-list"></div>
+        </div>
+      </section>
 
+      <!-- ============ SETTINGS ============ -->
+      <section class="view" data-view="settings" hidden>
+        <header class="view-top">
+          <h1 class="view-title">Settings</h1>
+        </header>
+        <div class="scroll" data-scroll="settings">
+          <div class="section-head"><h2>接続サービス</h2></div>
+          <div id="settingsServices" class="settings-list"></div>
+
+          <div class="section-head"><h2>同期</h2></div>
+          <div class="settings-list">
+            <button class="settings-row" id="settingsSync" type="button">
+              <span class="settings-label">Gist同期の設定</span>
+              <span class="settings-value" id="settingsSyncState">未設定</span>
+            </button>
+            <button class="settings-row" id="settingsSyncNow" type="button">
+              <span class="settings-label">いま同期する</span>
+              <span class="settings-value">›</span>
+            </button>
+          </div>
+
+          <div class="section-head"><h2>データ</h2></div>
+          <div class="settings-list">
+            <label class="settings-row" for="importJson2">
+              <span class="settings-label">JSONを読み込む</span>
+              <span class="settings-value">›</span>
+            </label>
+            <input id="importJson2" type="file" accept="application/json,.json" hidden />
+            <button class="settings-row" id="settingsExport" type="button">
+              <span class="settings-label">JSONを書き出す</span>
+              <span class="settings-value">›</span>
+            </button>
+            <button class="settings-row danger" id="settingsClear" type="button">
+              <span class="settings-label">この端末のデータを削除</span>
+              <span class="settings-value">›</span>
+            </button>
+          </div>
+          <p class="settings-foot">TONITE · あなたの映画ライブラリ</p>
+        </div>
+      </section>
+    </div>
+
+    <!-- ============ BOTTOM NAV ============ -->
+    <nav class="tabbar" aria-label="ナビゲーション">
+      <button class="tab is-active" type="button" data-view="home"><span class="tab-ico">⌂</span><span>Home</span></button>
+      <button class="tab" type="button" data-view="library"><span class="tab-ico">▤</span><span>Library</span></button>
+      <button class="tab" type="button" data-view="search"><span class="tab-ico">🔍</span><span>Search</span></button>
+      <button class="tab" type="button" data-view="picks"><span class="tab-ico">✦</span><span>Picks</span></button>
+      <button class="tab" type="button" data-view="settings"><span class="tab-ico">⚙</span><span>Settings</span></button>
+    </nav>
+
+    <!-- ============ DIALOGS ============ -->
     <dialog id="detailDialog">
       <article id="detailContent" class="detail-card"></article>
     </dialog>
@@ -155,25 +228,28 @@
       </form>
     </dialog>
 
-    <template id="cardTemplate">
-      <article class="movie-card">
-        <img class="poster" alt="" loading="lazy" referrerpolicy="no-referrer" />
-        <div class="movie-copy">
-          <div class="movie-meta"></div>
-          <h3></h3>
-          <div class="ratings"></div>
-          <div class="quality" hidden></div>
-          <div class="providers" hidden></div>
-          <div class="chips"></div>
-          <div class="movie-actions">
-            <button class="watched-button" type="button">観た</button>
-            <button class="favorite-button" type="button" aria-label="お気に入り">☆</button>
-            <button class="trailer-button" type="button">▶ 予告編</button>
-            <button class="detail-button" type="button">詳細</button>
-            <a class="watch-link" target="_blank" rel="noreferrer">開く</a>
-          </div>
+    <dialog id="saveViewDialog">
+      <form id="saveViewForm" method="dialog" class="sync-form">
+        <h2>保存ビューを作る</h2>
+        <p>いまの絞り込み条件に名前をつけて保存します。ワンタップで呼び出せます。</p>
+        <label><span>名前</span><input id="saveViewName" autocomplete="off" placeholder="例: 今夜 / 泣きたい / 90分以内" /></label>
+        <div class="detail-actions">
+          <button type="button" id="saveViewCancel">閉じる</button>
+          <button type="submit" class="sync-save">保存する</button>
         </div>
-      </article>
+      </form>
+    </dialog>
+
+    <template id="posterTemplate">
+      <button class="poster-card" type="button">
+        <span class="poster-wrap">
+          <img class="poster" alt="" loading="lazy" referrerpolicy="no-referrer" />
+          <span class="poster-fav" hidden>★</span>
+          <span class="poster-badge" hidden></span>
+        </span>
+        <span class="poster-title"></span>
+        <span class="poster-sub"></span>
+      </button>
     </template>
 
     <script src="app.js"></script>
