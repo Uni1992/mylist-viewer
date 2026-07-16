@@ -62,28 +62,9 @@ const filters = {
   service: $("#service"),
   genre: $("#genre"),
   duration: $("#duration"),
-  minMinutes: $("#minMinutes"),
-  maxMinutes: $("#maxMinutes"),
   watchState: $("#watchState"),
   sort: $("#sort")
 };
-const RUNTIME_CAP = 300;
-function runtimeRange() {
-  const rMin = Number(filters.minMinutes.value) || 0;
-  const rMaxRaw = Number(filters.maxMinutes.value);
-  return { rMin, rMax: rMaxRaw >= RUNTIME_CAP ? Infinity : rMaxRaw };
-}
-function runtimeLabelText() {
-  const { rMin, rMax } = runtimeRange();
-  if (rMin <= 0 && rMax === Infinity) return "指定なし";
-  return `${rMin <= 0 ? 0 : rMin}〜${rMax === Infinity ? "上限なし" : `${rMax}分`}`;
-}
-function updateRuntimeFill() {
-  const fill = $("#runtimeFill");
-  if (!fill) return;
-  fill.style.left = `${(Number(filters.minMinutes.value) / RUNTIME_CAP) * 100}%`;
-  fill.style.right = `${100 - (Number(filters.maxMinutes.value) / RUNTIME_CAP) * 100}%`;
-}
 
 function normalizeList(value) {
   const list = Array.isArray(value) ? value : String(value || "").split(/[,、]/);
@@ -160,11 +141,6 @@ function matches(item) {
   if (filters.service.value && serviceKey(item) !== filters.service.value) return false;
   if (filters.genre.value && !(item.genres || []).includes(filters.genre.value)) return false;
   if (filters.duration.value && durationKey(item.runtime) !== filters.duration.value) return false;
-  const { rMin, rMax } = runtimeRange();
-  if (rMin > 0 || rMax !== Infinity) {
-    if (!Number.isFinite(item.runtime)) return false;
-    if (item.runtime < rMin || item.runtime > rMax) return false;
-  }
   if (filters.watchState.value === "unwatched" && item.watched) return false;
   if (filters.watchState.value === "watched" && !item.watched) return false;
   if (filters.watchState.value === "favorite" && !item.favorite) return false;
@@ -231,12 +207,18 @@ const WATCH_FACETS = [
   { value: "unwatched", label: "未視聴" }, { value: "", label: "すべて" },
   { value: "watched", label: "視聴済み" }, { value: "favorite", label: "お気に入り" }
 ];
+const DURATION_FACETS = [
+  { value: "", label: "すべて" }, { value: "short", label: "80分未満" },
+  { value: "around90", label: "90分前後" }, { value: "around120", label: "120分前後" },
+  { value: "long", label: "140分以上" }, { value: "unknown", label: "時間不明" }
+];
 function countBy(kind, value) {
   if (value === "") return null;
   return state.items.filter((item) => {
     if (kind === "mediaType") return (item.mediaType || "unknown") === value;
     if (kind === "service") return serviceKey(item) === value;
     if (kind === "genre") return (item.genres || []).includes(value);
+    if (kind === "duration") return durationKey(item.runtime) === value;
     if (kind === "watchState") return value === "unwatched" ? !item.watched : value === "watched" ? item.watched : item.favorite;
     return false;
   }).length;
@@ -266,6 +248,7 @@ function renderFacetGroup(container, kind, options) {
 function buildFacets() {
   renderFacetGroup($("#mediaFacets"), "mediaType", MEDIA_FACETS);
   renderFacetGroup($("#watchFacets"), "watchState", WATCH_FACETS);
+  renderFacetGroup($("#durationFacets"), "duration", DURATION_FACETS);
   const services = [...new Set(state.items.map(serviceKey))].sort((a, b) => serviceLabel(a).localeCompare(serviceLabel(b), "ja"));
   renderFacetGroup($("#serviceFacets"), "service", [{ value: "", label: "すべて" }, ...services.map((k) => ({ value: k, label: serviceLabel(k) }))]);
   const genres = [...new Set(state.items.flatMap((item) => item.genres || []))].sort((a, b) => a.localeCompare(b, "ja"));
@@ -286,9 +269,8 @@ function updateFilterSummary() {
   if (watchLabel && watchLabel !== "すべて") parts.push(watchLabel);
   if (serviceLabelText) parts.push(serviceLabelText);
   if (filters.genre.value) parts.push(filters.genre.value);
-  const runtimeLabel = runtimeLabelText();
-  updateRuntimeFill();
-  if (runtimeLabel !== "指定なし") parts.push(runtimeLabel);
+  const durationLabel = filters.duration.selectedOptions[0]?.textContent;
+  if (durationLabel && durationLabel !== "すべて") parts.push(durationLabel);
   if (filters.query.value.trim()) parts.push("検索中");
   $("#filterSummary").textContent = parts.join("・") || "すべて";
 }
@@ -490,6 +472,7 @@ const GistSync = (() => {
 
   const metaStamp = (item) => Date.parse(item?.updatedAt || item?.lastCheckedAt || item?.importedAt || "") || 0;
   const stateStamp = (item) => Date.parse(item?.stateUpdatedAt || "") || 0;
+  const importedStamp = (item) => Date.parse(item?.importedAt || "") || 0;
 
   function getConfig() {
     try {
@@ -526,6 +509,10 @@ const GistSync = (() => {
       if (field in stateSource) merged[field] = stateSource[field];
     }
     if (stateSource.stateUpdatedAt) merged.stateUpdatedAt = stateSource.stateUpdatedAt;
+    const lockSource = [a, b].filter((x) => x.imageLocked).sort((x, y) => metaStamp(y) - metaStamp(x))[0];
+    if (lockSource) { merged.image = lockSource.image; merged.imageLocked = true; }
+    const typeSource = [a, b].filter((x) => x.mediaTypeLocked).sort((x, y) => metaStamp(y) - metaStamp(x))[0];
+    if (typeSource) { merged.mediaType = typeSource.mediaType; merged.mediaTypeLocked = true; }
     return merged;
   }
 
@@ -541,7 +528,8 @@ const GistSync = (() => {
     }
     for (const [id, at] of Object.entries(deleted)) {
       const item = map.get(id);
-      if (item && metaStamp(item) <= (Date.parse(at) || 0) && stateStamp(item) <= (Date.parse(at) || 0)) map.delete(id);
+      const t = Date.parse(at) || 0;
+      if (item && stateStamp(item) <= t && importedStamp(item) <= t) map.delete(id);
     }
     return { items: [...map.values()], deleted };
   }
@@ -610,14 +598,6 @@ async function importFile(file) {
 
 Object.values(filters).forEach((control) => control.addEventListener("input", render));
 
-// 上映時間スライダー: 下限が上限を超えないようにする
-filters.minMinutes.addEventListener("input", () => {
-  if (Number(filters.minMinutes.value) > Number(filters.maxMinutes.value)) { filters.maxMinutes.value = filters.minMinutes.value; render(); }
-});
-filters.maxMinutes.addEventListener("input", () => {
-  if (Number(filters.maxMinutes.value) < Number(filters.minMinutes.value)) { filters.minMinutes.value = filters.maxMinutes.value; render(); }
-});
-
 // 絞り込みの折りたたみ
 const filterToggle = $("#filterToggle");
 const filtersPanel = $("#filtersPanel");
@@ -663,8 +643,6 @@ $("#clearFilters").addEventListener("click", () => {
   filters.service.value = "";
   filters.genre.value = "";
   filters.duration.value = "";
-  filters.minMinutes.value = 0;
-  filters.maxMinutes.value = RUNTIME_CAP;
   filters.watchState.value = "unwatched";
   filters.sort.value = "added";
   render();

@@ -61,18 +61,13 @@
           <span class="facet-label">視聴状態</span>
           <div class="facet-chips" id="watchFacets"></div>
         </div>
+        <div class="facet-row" data-facet="duration">
+          <span class="facet-label">上映時間</span>
+          <div class="facet-chips" id="durationFacets"></div>
+        </div>
         <div class="facet-row facet-genre" data-facet="genre">
           <span class="facet-label">ジャンル</span>
           <div class="facet-chips" id="genreFacets"></div>
-        </div>
-        <div class="runtime-field">
-          <span class="ctl-label">上映時間 <b id="runtimeLabel">指定なし</b></span>
-          <div class="range-slider" id="runtimeSlider">
-            <div class="range-track"></div>
-            <div class="range-fill" id="runtimeFill"></div>
-            <input id="minMinutes" type="range" min="0" max="300" step="10" value="0" aria-label="上映時間の下限（分）" />
-            <input id="maxMinutes" type="range" min="0" max="300" step="10" value="300" aria-label="上映時間の上限（分）" />
-          </div>
         </div>
         <label class="sort-field">
           <span class="ctl-label">並び順</span>
@@ -104,7 +99,14 @@
             <option value="watched">視聴済み</option>
             <option value="favorite">お気に入り</option>
           </select>
-          <select id="duration"><option value="">すべて</option></select>
+          <select id="duration">
+            <option value="">すべて</option>
+            <option value="short">80分未満</option>
+            <option value="around90">90分前後</option>
+            <option value="around120">120分前後</option>
+            <option value="long">140分以上</option>
+            <option value="unknown">時間不明</option>
+          </select>
         </div>
       </section>
 
