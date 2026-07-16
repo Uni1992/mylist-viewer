@@ -226,9 +226,13 @@ function createCard(item) {
   const card = $("#cardTemplate").content.firstElementChild.cloneNode(true);
   card.classList.toggle("is-watched", Boolean(item.watched));
   const poster = $(".poster", card);
-  if (item.image) poster.src = item.image;
+  const primaryImage = item.image || item.tmdbImage || "";
+  if (primaryImage) poster.src = primaryImage;
   poster.alt = item.title ? `${item.title}のポスター` : "";
-  poster.addEventListener("error", () => poster.removeAttribute("src"));
+  poster.addEventListener("error", () => {
+    if (item.tmdbImage && poster.src !== item.tmdbImage) poster.src = item.tmdbImage;
+    else poster.removeAttribute("src");
+  });
   const remaining = item.expiresAt ? daysUntil(item.expiresAt) : null;
   $(".movie-meta", card).textContent = [
     item.mediaType && item.mediaType !== "unknown" ? mediaLabels[item.mediaType] : null,

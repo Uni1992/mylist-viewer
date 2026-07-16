@@ -1,4 +1,4 @@
-const cacheName = "unext-mobile-viewer-v4";
+const cacheName = "unext-mobile-viewer-v5";
 const assets = [
   "./",
   "./index.html",
