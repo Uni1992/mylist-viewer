@@ -62,10 +62,28 @@ const filters = {
   service: $("#service"),
   genre: $("#genre"),
   duration: $("#duration"),
+  minMinutes: $("#minMinutes"),
   maxMinutes: $("#maxMinutes"),
   watchState: $("#watchState"),
   sort: $("#sort")
 };
+const RUNTIME_CAP = 300;
+function runtimeRange() {
+  const rMin = Number(filters.minMinutes.value) || 0;
+  const rMaxRaw = Number(filters.maxMinutes.value);
+  return { rMin, rMax: rMaxRaw >= RUNTIME_CAP ? Infinity : rMaxRaw };
+}
+function runtimeLabelText() {
+  const { rMin, rMax } = runtimeRange();
+  if (rMin <= 0 && rMax === Infinity) return "指定なし";
+  return `${rMin <= 0 ? 0 : rMin}〜${rMax === Infinity ? "上限なし" : `${rMax}分`}`;
+}
+function updateRuntimeFill() {
+  const fill = $("#runtimeFill");
+  if (!fill) return;
+  fill.style.left = `${(Number(filters.minMinutes.value) / RUNTIME_CAP) * 100}%`;
+  fill.style.right = `${100 - (Number(filters.maxMinutes.value) / RUNTIME_CAP) * 100}%`;
+}
 
 function normalizeList(value) {
   const list = Array.isArray(value) ? value : String(value || "").split(/[,、]/);
@@ -142,8 +160,11 @@ function matches(item) {
   if (filters.service.value && serviceKey(item) !== filters.service.value) return false;
   if (filters.genre.value && !(item.genres || []).includes(filters.genre.value)) return false;
   if (filters.duration.value && durationKey(item.runtime) !== filters.duration.value) return false;
-  const limit = Number(filters.maxMinutes.value);
-  if (limit && (!Number.isFinite(item.runtime) || item.runtime > limit)) return false;
+  const { rMin, rMax } = runtimeRange();
+  if (rMin > 0 || rMax !== Infinity) {
+    if (!Number.isFinite(item.runtime)) return false;
+    if (item.runtime < rMin || item.runtime > rMax) return false;
+  }
   if (filters.watchState.value === "unwatched" && item.watched) return false;
   if (filters.watchState.value === "watched" && !item.watched) return false;
   if (filters.watchState.value === "favorite" && !item.favorite) return false;
@@ -201,10 +222,59 @@ function updateServiceOptions() {
   if ([...filters.service.options].some((option) => option.value === selected)) filters.service.value = selected;
 }
 
-function updateQuickFilters() {
-  document.querySelectorAll(".quick-filter").forEach((button) => {
-    const control = filters[button.dataset.filter];
-    button.classList.toggle("is-active", control?.value === button.dataset.value);
+// ---- カタログ風ファセット（隠しselectを状態の源にしてチップで操作） ----
+const MEDIA_FACETS = [
+  { value: "", label: "すべて" }, { value: "movie", label: "映画" },
+  { value: "drama", label: "ドラマ" }, { value: "anime", label: "アニメ" }, { value: "unknown", label: "未分類" }
+];
+const WATCH_FACETS = [
+  { value: "unwatched", label: "未視聴" }, { value: "", label: "すべて" },
+  { value: "watched", label: "視聴済み" }, { value: "favorite", label: "お気に入り" }
+];
+function countBy(kind, value) {
+  if (value === "") return null;
+  return state.items.filter((item) => {
+    if (kind === "mediaType") return (item.mediaType || "unknown") === value;
+    if (kind === "service") return serviceKey(item) === value;
+    if (kind === "genre") return (item.genres || []).includes(value);
+    if (kind === "watchState") return value === "unwatched" ? !item.watched : value === "watched" ? item.watched : item.favorite;
+    return false;
+  }).length;
+}
+function renderFacetGroup(container, kind, options) {
+  container.replaceChildren();
+  for (const { value, label } of options) {
+    const chip = document.createElement("button");
+    chip.type = "button";
+    chip.className = "facet-chip";
+    chip.dataset.value = value;
+    chip.textContent = label;
+    const count = countBy(kind, value);
+    if (count != null) {
+      const badge = document.createElement("span");
+      badge.className = "facet-count";
+      badge.textContent = count;
+      chip.append(badge);
+    }
+    chip.addEventListener("click", () => {
+      filters[kind].value = filters[kind].value === value ? "" : value;
+      render();
+    });
+    container.append(chip);
+  }
+}
+function buildFacets() {
+  renderFacetGroup($("#mediaFacets"), "mediaType", MEDIA_FACETS);
+  renderFacetGroup($("#watchFacets"), "watchState", WATCH_FACETS);
+  const services = [...new Set(state.items.map(serviceKey))].sort((a, b) => serviceLabel(a).localeCompare(serviceLabel(b), "ja"));
+  renderFacetGroup($("#serviceFacets"), "service", [{ value: "", label: "すべて" }, ...services.map((k) => ({ value: k, label: serviceLabel(k) }))]);
+  const genres = [...new Set(state.items.flatMap((item) => item.genres || []))].sort((a, b) => a.localeCompare(b, "ja"));
+  renderFacetGroup($("#genreFacets"), "genre", [{ value: "", label: "すべて" }, ...genres.map((g) => ({ value: g, label: g }))]);
+}
+function syncFacets() {
+  document.querySelectorAll(".facet-row").forEach((row) => {
+    const value = filters[row.dataset.facet].value;
+    row.querySelectorAll(".facet-chip").forEach((chip) => chip.classList.toggle("is-active", chip.dataset.value === value));
   });
 }
 
@@ -212,14 +282,13 @@ function updateFilterSummary() {
   const parts = [];
   if (filters.mediaType.value) parts.push(mediaLabels[filters.mediaType.value] || "");
   const watchLabel = filters.watchState.selectedOptions[0]?.textContent;
-  const durationLabel = filters.duration.selectedOptions[0]?.textContent;
-  const serviceLabelText = filters.service.selectedOptions[0]?.textContent;
-  if (watchLabel) parts.push(watchLabel);
-  if (serviceLabelText && serviceLabelText !== "すべて") parts.push(serviceLabelText);
+  const serviceLabelText = filters.service.value ? serviceLabel(filters.service.value) : null;
+  if (watchLabel && watchLabel !== "すべて") parts.push(watchLabel);
+  if (serviceLabelText) parts.push(serviceLabelText);
   if (filters.genre.value) parts.push(filters.genre.value);
-  if (durationLabel && durationLabel !== "すべて") parts.push(durationLabel);
-  const limit = Number(filters.maxMinutes.value);
-  if (limit) parts.push(`〜${limit}分`);
+  const runtimeLabel = runtimeLabelText();
+  updateRuntimeFill();
+  if (runtimeLabel !== "指定なし") parts.push(runtimeLabel);
   if (filters.query.value.trim()) parts.push("検索中");
   $("#filterSummary").textContent = parts.join("・") || "すべて";
 }
@@ -329,12 +398,15 @@ function openTrailer(item) {
   $("#trailerDialog").showModal();
 }
 
+let lastFacetSig = "";
 function render() {
   updateServiceOptions();
   updateGenreOptions();
+  const sig = `${state.items.length}|${new Set(state.items.flatMap((item) => item.genres || [])).size}|${[...new Set(state.items.map(serviceKey))].join(",")}`;
+  if (sig !== lastFacetSig) { buildFacets(); lastFacetSig = sig; }
   state.filtered = state.items.filter(matches).sort(sorter(filters.sort.value));
   updateFilterSummary();
-  updateQuickFilters();
+  syncFacets();
 
   const library = $("#library");
   library.replaceChildren();
@@ -343,10 +415,9 @@ function render() {
   const runtimes = state.items.map((item) => item.runtime).filter(Number.isFinite);
   $("#totalCount").textContent = state.items.length;
   $("#unwatchedCount").textContent = state.items.filter((item) => !item.watched).length;
-  $("#averageRuntime").textContent = runtimes.length ? `${Math.round(runtimes.reduce((a, b) => a + b, 0) / runtimes.length)}分` : "-";
+  $("#averageRuntime").textContent = runtimes.length ? `${Math.round(runtimes.reduce((a, b) => a + b, 0) / runtimes.length)}分` : "—";
   $("#filteredCount").textContent = `${state.filtered.length}件`;
   $("#resultsTitle").textContent = filters.watchState.value === "unwatched" ? "未視聴の作品" : "該当する作品";
-  $("#importPanel").classList.toggle("is-hidden", state.items.length > 0);
   $("#empty").hidden = state.filtered.length > 0;
   if (!state.filtered.length && state.items.length) {
     $("#empty h2").textContent = "条件に合う作品がありません";
@@ -539,14 +610,30 @@ async function importFile(file) {
 
 Object.values(filters).forEach((control) => control.addEventListener("input", render));
 
-document.querySelectorAll(".quick-filter").forEach((button) => {
-  button.addEventListener("click", () => {
-    const control = filters[button.dataset.filter];
-    if (!control) return;
-    control.value = control.value === button.dataset.value ? "" : button.dataset.value;
-    render();
-  });
+// 上映時間スライダー: 下限が上限を超えないようにする
+filters.minMinutes.addEventListener("input", () => {
+  if (Number(filters.minMinutes.value) > Number(filters.maxMinutes.value)) { filters.maxMinutes.value = filters.minMinutes.value; render(); }
 });
+filters.maxMinutes.addEventListener("input", () => {
+  if (Number(filters.maxMinutes.value) < Number(filters.minMinutes.value)) { filters.minMinutes.value = filters.maxMinutes.value; render(); }
+});
+
+// 絞り込みの折りたたみ
+const filterToggle = $("#filterToggle");
+const filtersPanel = $("#filtersPanel");
+filterToggle.addEventListener("click", () => {
+  const open = filtersPanel.classList.toggle("is-open");
+  filterToggle.setAttribute("aria-expanded", String(open));
+});
+
+// •••メニュー
+const moreMenu = $("#moreMenu");
+const moreButton = $("#moreButton");
+moreButton.addEventListener("click", (event) => { event.stopPropagation(); moreMenu.hidden = !moreMenu.hidden; });
+document.addEventListener("click", (event) => {
+  if (!moreMenu.contains(event.target) && event.target !== moreButton) moreMenu.hidden = true;
+});
+moreMenu.querySelectorAll("button, label").forEach((el) => el.addEventListener("click", () => { moreMenu.hidden = true; }));
 
 $("#importJson").addEventListener("change", async (event) => {
   const file = event.target.files?.[0];
@@ -576,6 +663,8 @@ $("#clearFilters").addEventListener("click", () => {
   filters.service.value = "";
   filters.genre.value = "";
   filters.duration.value = "";
+  filters.minMinutes.value = 0;
+  filters.maxMinutes.value = RUNTIME_CAP;
   filters.watchState.value = "unwatched";
   filters.sort.value = "added";
   render();

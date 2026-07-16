@@ -14,108 +14,99 @@
   <body>
     <main class="app-shell">
       <header class="topbar">
-        <div>
-          <p class="brand"><span class="brand-mark">ML</span>MY LIST BROWSER</p>
-          <h1>次に観る一本</h1>
-        </div>
-        <div class="topbar-actions">
-          <button id="syncButton" class="icon-action" type="button" aria-label="同期">⇅</button>
-          <button id="pickButton" class="icon-action" type="button" aria-label="今夜の一本を選ぶ">◎</button>
+        <a class="logo" href="#" aria-label="トップ">
+          <span class="logo-mark">ML</span>
+          <b>MY LIST<br />BROWSER</b>
+        </a>
+        <button id="moreButton" class="icon-btn" type="button" aria-label="メニュー">•••</button>
+        <div id="moreMenu" class="menu" hidden>
+          <button id="syncButton" type="button">同期の設定</button>
+          <label for="importJson">JSONを読み込む</label>
+          <input id="importJson" type="file" accept="application/json,.json" hidden />
+          <button id="exportJson" type="button">JSONを書き出す</button>
+          <button id="loadSample" type="button">サンプルを表示</button>
+          <button id="clearFilters" type="button">絞り込みをリセット</button>
+          <hr />
+          <button id="clearAll" class="danger" type="button">この端末のデータを削除</button>
         </div>
       </header>
 
       <p id="syncStatus" class="sync-status" role="status" hidden></p>
 
-      <section id="importPanel" class="import-panel">
-        <p>右上の「⇅」からGist同期を設定すると、PC拡張の取り込み結果が自動でここに届きます。JSONファイルの読み込みも使えます。</p>
-        <div class="import-actions">
-          <label class="primary-button" for="importJson">JSONを読み込む</label>
-          <input id="importJson" type="file" accept="application/json,.json" hidden />
-          <button id="loadSample" class="ghost-button" type="button">サンプル表示</button>
+      <label class="search-field">
+        <span class="search-icon">🔍</span>
+        <input id="query" type="search" placeholder="作品名・ジャンル・メモで探す" autocomplete="off" />
+      </label>
+      <p class="stat-line" aria-label="集計">
+        <strong id="totalCount">0</strong> 作品<span class="dot">·</span>
+        <strong id="unwatchedCount">0</strong> 未視聴<span class="dot">·</span>
+        平均 <strong id="averageRuntime">—</strong>
+      </p>
+
+      <button id="filterToggle" class="filter-toggle" type="button" aria-expanded="false" aria-controls="filtersPanel">
+        <span>絞り込み</span>
+        <small id="filterSummary">未視聴</small>
+      </button>
+
+      <section id="filtersPanel" class="filters" aria-label="絞り込み">
+        <div class="facet-row" data-facet="mediaType">
+          <span class="facet-label">大ジャンル</span>
+          <div class="facet-chips" id="mediaFacets"></div>
         </div>
-      </section>
-
-      <section class="stats" aria-label="ライブラリ集計">
-        <div><strong id="totalCount">0</strong><span>作品</span></div>
-        <div><strong id="unwatchedCount">0</strong><span>未視聴</span></div>
-        <div><strong id="averageRuntime">-</strong><span>平均時間</span></div>
-      </section>
-
-      <section class="search-panel" aria-label="作品検索">
-        <label class="search-field">
-          <span>検索</span>
-          <input id="query" type="search" placeholder="作品名、ジャンル、メモ" autocomplete="off" />
+        <div class="facet-row" data-facet="service">
+          <span class="facet-label">サービス</span>
+          <div class="facet-chips" id="serviceFacets"></div>
+        </div>
+        <div class="facet-row" data-facet="watchState">
+          <span class="facet-label">視聴状態</span>
+          <div class="facet-chips" id="watchFacets"></div>
+        </div>
+        <div class="facet-row facet-genre" data-facet="genre">
+          <span class="facet-label">ジャンル</span>
+          <div class="facet-chips" id="genreFacets"></div>
+        </div>
+        <div class="runtime-field">
+          <span class="ctl-label">上映時間 <b id="runtimeLabel">指定なし</b></span>
+          <div class="range-slider" id="runtimeSlider">
+            <div class="range-track"></div>
+            <div class="range-fill" id="runtimeFill"></div>
+            <input id="minMinutes" type="range" min="0" max="300" step="10" value="0" aria-label="上映時間の下限（分）" />
+            <input id="maxMinutes" type="range" min="0" max="300" step="10" value="300" aria-label="上映時間の上限（分）" />
+          </div>
+        </div>
+        <label class="sort-field">
+          <span class="ctl-label">並び順</span>
+          <select id="sort">
+            <option value="added">追加順</option>
+            <option value="expiry">配信終了が近い順</option>
+            <option value="ratingDesc">評価が高い順</option>
+            <option value="backlog">積み順（古い順）</option>
+            <option value="title">タイトル順</option>
+            <option value="runtimeAsc">短い順</option>
+            <option value="runtimeDesc">長い順</option>
+            <option value="yearDesc">新しい順</option>
+          </select>
         </label>
-        <div class="quick-filters" aria-label="よく使う絞り込み">
-          <button class="quick-filter is-active" type="button" data-filter="watchState" data-value="unwatched">未視聴</button>
-          <button class="quick-filter" type="button" data-filter="mediaType" data-value="movie">映画</button>
-          <button class="quick-filter" type="button" data-filter="mediaType" data-value="drama">ドラマ</button>
-          <button class="quick-filter" type="button" data-filter="mediaType" data-value="anime">アニメ</button>
-          <button class="quick-filter" type="button" data-filter="duration" data-value="around90">90分前後</button>
-          <button class="quick-filter" type="button" data-filter="watchState" data-value="favorite">お気に入り</button>
+
+        <div class="hidden-controls" hidden aria-hidden="true">
+          <select id="mediaType">
+            <option value="">すべて</option>
+            <option value="movie">映画</option>
+            <option value="drama">ドラマシリーズ</option>
+            <option value="anime">アニメ</option>
+            <option value="unknown">未分類</option>
+          </select>
+          <select id="service"><option value="">すべて</option></select>
+          <select id="genre"><option value="">すべて</option></select>
+          <select id="watchState">
+            <option value="unwatched">未視聴</option>
+            <option value="">すべて</option>
+            <option value="watched">視聴済み</option>
+            <option value="favorite">お気に入り</option>
+          </select>
+          <select id="duration"><option value="">すべて</option></select>
         </div>
       </section>
-
-      <details class="details-filter">
-        <summary>詳しく絞り込む <span id="filterSummary">未視聴</span></summary>
-        <div class="filter-grid">
-          <label>
-            <span>大ジャンル</span>
-            <select id="mediaType">
-              <option value="">すべて</option>
-              <option value="movie">映画</option>
-              <option value="drama">ドラマシリーズ</option>
-              <option value="anime">アニメ</option>
-              <option value="unknown">未分類</option>
-            </select>
-          </label>
-          <label>
-            <span>サービス</span>
-            <select id="service"><option value="">すべて</option></select>
-          </label>
-          <label>
-            <span>ジャンル</span>
-            <select id="genre"><option value="">すべて</option></select>
-          </label>
-          <label>
-            <span>上映時間</span>
-            <select id="duration">
-              <option value="">すべて</option>
-              <option value="short">80分未満</option>
-              <option value="around90">90分前後（80–100分）</option>
-              <option value="around120">120分前後（101–139分）</option>
-              <option value="long">140分以上</option>
-              <option value="unknown">時間不明</option>
-            </select>
-          </label>
-          <label>
-            <span>視聴状態</span>
-            <select id="watchState">
-              <option value="unwatched">未視聴</option>
-              <option value="">すべて</option>
-              <option value="watched">視聴済み</option>
-              <option value="favorite">お気に入り</option>
-            </select>
-          </label>
-          <label>
-            <span>今夜の持ち時間（分）</span>
-            <input id="maxMinutes" type="number" min="10" max="600" step="5" placeholder="例: 120" />
-          </label>
-          <label>
-            <span>並び順</span>
-            <select id="sort">
-              <option value="added">追加順</option>
-              <option value="expiry">配信終了が近い順</option>
-              <option value="ratingDesc">評価が高い順</option>
-              <option value="backlog">積み順（古い順）</option>
-              <option value="title">タイトル順</option>
-              <option value="runtimeAsc">短い順</option>
-              <option value="runtimeDesc">長い順</option>
-              <option value="yearDesc">新しい順</option>
-            </select>
-          </label>
-        </div>
-      </details>
 
       <section class="results-head">
         <h2 id="resultsTitle">未視聴の作品</h2>
@@ -125,17 +116,15 @@
       <section id="library" class="library" aria-live="polite"></section>
 
       <section id="empty" class="empty" hidden>
+        <div class="empty-mark">🎬</div>
         <h2>まだ作品がありません</h2>
-        <p>PCの拡張機能からJSONを書き出して、この画面で読み込んでください。</p>
+        <p>右上の「•••」から同期を設定するか、JSONを読み込むと作品が表示されます。</p>
       </section>
     </main>
 
-    <nav class="bottom-bar" aria-label="操作">
-      <label for="importJson">読み込み</label>
-      <button id="exportJson" type="button">書き出し</button>
-      <button id="clearFilters" type="button">条件クリア</button>
-      <button id="clearAll" type="button">削除</button>
-    </nav>
+    <button id="pickButton" class="tonight-btn" type="button">
+      <span class="tonight-ico">🎬</span> 今夜の一本を選ぶ
+    </button>
 
     <dialog id="detailDialog">
       <article id="detailContent" class="detail-card"></article>
