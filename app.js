@@ -511,8 +511,15 @@ function createPosterCard(item) {
 }
 
 /* ============ PICKS ============ */
+// Filmarksで高評価(4.0+)を付けた作品とお気に入りのジャンルから、好みを学習する
+function genreAffinity() {
+  const liked = state.items.filter((i) => Number(i.filmarksScore) >= 4 || i.favorite);
+  const counts = {};
+  liked.forEach((i) => itemGenres(i).forEach((g) => { counts[g] = (counts[g] || 0) + 1; }));
+  return { counts, total: liked.length };
+}
 // 未視聴からスコアで一本を選ぶ。理由も添える。
-function scoreItem(item) {
+function scoreItem(item, aff) {
   let s = 0;
   const rating = bestRating(item);
   if (rating) s += (rating - 6) * 4;                 // 評価
@@ -522,9 +529,18 @@ function scoreItem(item) {
   if (remain !== null && remain <= 30) s += 20 - remain; // 終了間近を優先
   if (Number.isFinite(item.runtime) && item.runtime <= 120) s += 3; // 観やすさ
   if (item.favorite) s += 4;
+  if (aff?.total >= 3) {
+    // 好みのジャンルとの重なり（最大5点）
+    const overlap = itemGenres(item).reduce((sum, g) => sum + (aff.counts[g] || 0), 0);
+    s += Math.min((overlap / aff.total) * 10, 5);
+  }
   return s;
 }
-function reasonsFor(item) {
+function likedGenreOf(item, aff) {
+  if (!aff || aff.total < 3) return null;
+  return itemGenres(item).filter((g) => aff.counts[g] >= 2).sort((a, b) => aff.counts[b] - aff.counts[a])[0] || null;
+}
+function reasonsFor(item, aff) {
   const out = [];
   const days = daysSince(item.importedAt);
   if (days !== null && days >= 60) out.push(`保存から${days}日、そろそろ観たい一本`);
@@ -532,6 +548,8 @@ function reasonsFor(item) {
   if (remain !== null && remain <= 30) out.push(remain <= 0 ? "まもなく配信終了" : `配信終了まであと${remain}日`);
   const rating = bestRating(item);
   if (rating >= 8) out.push(`IMDb/TMDB ${rating.toFixed(1)} の高評価`);
+  const likedGenre = likedGenreOf(item, aff);
+  if (likedGenre) out.push(`よく高評価をつける「${likedGenre}」の作品`);
   if (Number.isFinite(item.runtime) && item.runtime <= 100) out.push(`${item.runtime}分、今夜にちょうどいい尺`);
   if (item.favorite) out.push("お気に入りに入れていた作品");
   if (!out.length) out.push(`${serviceLabel(item)}のライブラリから`);
@@ -540,7 +558,8 @@ function reasonsFor(item) {
 function choosePick(reroll = false) {
   const pool = state.items.filter((i) => !i.watched && !i.hidden);
   if (!pool.length) return null;
-  const ranked = pool.map((i) => ({ item: i, score: scoreItem(i) })).sort((a, b) => b.score - a.score);
+  const aff = genreAffinity();
+  const ranked = pool.map((i) => ({ item: i, score: scoreItem(i, aff) })).sort((a, b) => b.score - a.score);
   const top = ranked.slice(0, Math.min(6, ranked.length));
   let chosen;
   if (reroll && state.pick) {
@@ -551,7 +570,7 @@ function choosePick(reroll = false) {
   } else {
     chosen = top[0];
   }
-  const result = { item: chosen.item, reasons: reasonsFor(chosen.item), alts: top.map((t) => t.item).filter((x) => x.id !== chosen.item.id).slice(0, 4) };
+  const result = { item: chosen.item, reasons: reasonsFor(chosen.item, aff), alts: top.map((t) => t.item).filter((x) => x.id !== chosen.item.id).slice(0, 4) };
   state.pick = result;
   return result;
 }
@@ -665,6 +684,7 @@ function openDetail(item) {
   if (item.rating) scoreTexts.push(`<span class="score-tmdb">★ ${item.rating}</span>`);
   if (item.imdbRating) scoreTexts.push(`<span class="score-imdb">IMDb ${item.imdbRating}</span>`);
   if (item.rtScore) scoreTexts.push(`<span class="score-rt">🍅 ${item.rtScore}%</span>`);
+  if (item.filmarksScore) scoreTexts.push(`<span class="score-filmarks">Filmarks ${item.filmarksScore}</span>`);
   if (scoreTexts.length) {
     const scores = document.createElement("div");
     scores.className = "detail-scores";

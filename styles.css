@@ -754,6 +754,7 @@ dialog::backdrop { background: #05050acc; backdrop-filter: blur(6px); }
 .score-tmdb { color: #f5c518; }
 .score-imdb { padding: 1px 5px; border-radius: 4px; background: #f5c518; color: #131313; font-size: 11px; font-weight: 900; }
 .score-rt { color: #fa4a2a; }
+.score-filmarks { color: #ff6e9f; }
 
 .trailer-dialog { width: min(680px, calc(100vw - 20px)); padding: 0; border: 1px solid #34343a; border-radius: 16px; background: #141416; }
 .trailer-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 12px 14px; }
