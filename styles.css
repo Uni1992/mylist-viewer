@@ -636,7 +636,7 @@ button { transition: transform .25s var(--spring), background .2s var(--ease), c
   bottom: 0;
   z-index: 50;
   display: grid;
-  grid-template-columns: repeat(5, 1fr);
+  grid-template-columns: repeat(4, 1fr);
   height: var(--tabbar-h);
   padding-bottom: env(safe-area-inset-bottom);
   border-top: 1px solid var(--line);
@@ -698,6 +698,30 @@ dialog::backdrop { background: #05050acc; backdrop-filter: blur(6px); }
 .detail-card .detail-meta { margin: 2px 0 8px; font-size: 12px; letter-spacing: .03em; }
 .detail-card .detail-ratings-line { margin: 0 0 6px; color: #f5c518; font-size: 14px; font-weight: 800; }
 .detail-card .detail-badges { margin: 0 0 10px; color: #9db6f0; font-size: 12px; font-weight: 700; line-height: 1.7; }
+
+/* 観られるサービスのチップ（詳細ダイアログ） */
+.svc-chips { display: flex; flex-wrap: wrap; gap: 8px; margin: 4px 0 12px; }
+.svc-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 40px;
+  padding: 0 12px;
+  border: 1px solid var(--line);
+  border-radius: 11px;
+  background: var(--surface-2);
+  text-decoration: none;
+  color: var(--ink);
+}
+.svc-chip:active { transform: scale(.95); }
+.svc-chip img { width: 20px; height: 20px; border-radius: 5px; }
+.svc-chip b { font-size: 13px; font-weight: 800; }
+.svc-chip small { color: var(--faint); font-size: 10.5px; font-weight: 700; }
+.svc-netflix { color: #ff5b5b; }
+.svc-disney { color: #7aa2ff; }
+.svc-prime { color: #56c7ff; }
+.svc-appletv { color: #eaeaea; }
+.svc-unext { color: #ffd25b; }
 .detail-card .detail-note { margin: 10px 0 0; padding: 9px 11px; border-left: 2px solid var(--accent); background: #ffffff08; font-size: 13px; }
 .detail-actions {
   position: sticky;

@@ -6,7 +6,6 @@ const legacyStorageKey = "unext-mobile-viewer-items";
 const deletedKey = "streaming-mobile-viewer-deleted";
 const syncConfigKey = "streaming-mobile-viewer-sync";
 const savedViewsKey = "tonite-saved-views";
-const recentSearchKey = "tonite-recent-search";
 
 const state = { items: [], filtered: [], deleted: {}, currentView: "home", pick: null };
 
@@ -20,6 +19,48 @@ const serviceNames = {
 };
 const serviceShort = { unext: "U-NEXT", disney: "Disney+", netflix: "Netflix", prime: "Prime", appletv: "Apple TV", other: "その他" };
 const mediaLabels = { movie: "映画", drama: "ドラマシリーズ", anime: "アニメ", unknown: "未分類" };
+
+// JustWatch由来のプロバイダ名を自分のサービスに正規化する（"Netflix Standard with Ads"や"Amazon Video"の乱立を防ぐ）
+const PROVIDER_CANON = [
+  { re: /netflix/i, key: "netflix" },
+  { re: /amazon|prime/i, key: "prime" },
+  { re: /disney/i, key: "disney" },
+  { re: /u-?next/i, key: "unext" },
+  { re: /apple\s*tv/i, key: "appletv" }
+];
+function canonProviderKey(name) {
+  for (const p of PROVIDER_CANON) if (p.re.test(name)) return p.key;
+  return null;
+}
+// この作品を観られる自分のサービス一覧（重複・広告プラン表記は畳む）。保存元サービスは必ず含む
+function watchServices(item) {
+  const map = new Map();
+  const logos = item.providers?.logos || {};
+  const add = (names, kind) => {
+    for (const name of names || []) {
+      const key = canonProviderKey(name);
+      if (!key || map.has(key)) continue;
+      map.set(key, { key, label: serviceLabel(key), kind, logo: logos[name] || null });
+    }
+  };
+  add(item.providers?.flatrate, "見放題");
+  add([...(item.providers?.free || []), ...(item.providers?.ads || [])], "無料");
+  add([...(item.providers?.rent || []), ...(item.providers?.buy || [])], "レンタル");
+  const own = serviceKey(item);
+  if (own !== "other" && !map.has(own)) {
+    map.set(own, { key: own, label: serviceLabel(item), kind: item.access || "保存元", logo: null });
+  }
+  // 保存元サービスを先頭に
+  return [...map.values()].sort((a, b) => (a.key === own ? -1 : 0) - (b.key === own ? -1 : 0));
+}
+// 保存元以外のサービスへは、そのサービス内の作品検索ページを開く（直接URLは持っていないため）
+const SERVICE_SEARCH = {
+  netflix: (t) => `https://www.netflix.com/search?q=${encodeURIComponent(t)}`,
+  prime: (t) => `https://www.primevideo.com/search/?phrase=${encodeURIComponent(t)}`,
+  disney: (t) => `https://www.disneyplus.com/ja-jp/search?q=${encodeURIComponent(t)}`,
+  unext: (t) => `https://video.unext.jp/freeword?query=${encodeURIComponent(t)}`,
+  appletv: (t) => `https://tv.apple.com/jp/search?term=${encodeURIComponent(t)}`
+};
 
 // 絞り込みの状態（唯一の真実）。DOMではなくここを源にする。
 const F = {
@@ -195,14 +236,13 @@ function patchItem(id, patch) {
 }
 
 /* ============ ビュールーター ============ */
-const views = { home: renderHome, library: renderLibrary, search: renderSearch, picks: renderPicks, settings: renderSettings };
+const views = { home: renderHome, library: renderLibrary, picks: renderPicks, settings: renderSettings };
 function showView(name) {
   if (!views[name]) name = "home";
   state.currentView = name;
   $$(".view").forEach((el) => { el.hidden = el.dataset.view !== name; });
   $$(".tab").forEach((tab) => tab.classList.toggle("is-active", tab.dataset.view === name));
   views[name]();
-  if (name === "search") setTimeout(() => $("#searchInput").focus(), 60);
 }
 function renderAll() {
   // 現在のビューを再描画（データ変更後に呼ぶ）
@@ -212,8 +252,7 @@ function renderAll() {
 /* ============ HOME ============ */
 const COLLECTIONS = [
   { id: "recent", icon: "🆕", name: "最近追加", desc: "新しくライブラリに入った作品", test: () => true, apply: (f) => { f.sort = "added"; } },
-  { id: "unwatched", icon: "◐", name: "未視聴", desc: "まだ観ていない作品", test: (i) => !i.watched, apply: (f) => { f.watchState = "unwatched"; } },
-  { id: "short", icon: "⏱", name: "90分以内", desc: "さくっと観られる一本", test: (i) => Number.isFinite(i.runtime) && i.runtime <= 90, apply: (f) => { f.maxRuntime = 90; } },
+  { id: "short", icon: "⏱", name: "90分前後", desc: "80〜100分、さくっと観られる一本", test: (i) => durationKey(i.runtime) === "around90", apply: (f) => { f.duration = "around90"; } },
   { id: "top", icon: "★", name: "高評価", desc: "IMDb / TMDB 8.0以上", test: (i) => bestRating(i) >= 8, apply: (f) => { f.minRating = 8; f.sort = "ratingDesc"; } },
   { id: "expiring", icon: "⏳", name: "配信終了間近", desc: "30日以内に終了", test: (i) => { const d = daysUntil(i.expiresAt); return d !== null && d <= 30; }, apply: (f) => { f.expiringSoon = true; f.sort = "expiry"; } },
   { id: "backlog", icon: "📚", name: "積み映画", desc: "長く積んだままの作品", test: (i) => !i.watched && daysSince(i.importedAt) !== null && daysSince(i.importedAt) >= 90, apply: (f) => { f.watchState = "unwatched"; f.sort = "backlog"; } },
@@ -293,7 +332,7 @@ function renderHome() {
 const QUICK_CHIPS = [
   { label: "映画", get: () => F.mediaType === "movie", toggle: () => { F.mediaType = F.mediaType === "movie" ? "" : "movie"; } },
   { label: "未視聴", get: () => F.watchState === "unwatched", toggle: () => { F.watchState = F.watchState === "unwatched" ? "" : "unwatched"; } },
-  { label: "90分以内", get: () => F.maxRuntime === 90, toggle: () => { F.maxRuntime = F.maxRuntime === 90 ? 0 : 90; } },
+  { label: "90分前後", get: () => F.duration === "around90", toggle: () => { F.duration = F.duration === "around90" ? "" : "around90"; F.maxRuntime = 0; } },
   { label: "IMDb 8+", get: () => F.minRating === 8, toggle: () => { F.minRating = F.minRating === 8 ? 0 : 8; } },
   { label: "お気に入り", get: () => F.watchState === "favorite", toggle: () => { F.watchState = F.watchState === "favorite" ? "" : "favorite"; } }
 ];
@@ -471,82 +510,6 @@ function createPosterCard(item) {
   return card;
 }
 
-/* ============ SEARCH ============ */
-function recentSearches() { try { return JSON.parse(localStorage.getItem(recentSearchKey) || "[]"); } catch { return []; } }
-function pushRecentSearch(q) {
-  q = q.trim();
-  if (!q) return;
-  const list = recentSearches().filter((x) => x !== q);
-  list.unshift(q);
-  localStorage.setItem(recentSearchKey, JSON.stringify(list.slice(0, 8)));
-}
-function renderSearch() {
-  const input = $("#searchInput");
-  const q = input.value.trim().toLocaleLowerCase("ja");
-  const suggest = $("#searchSuggest");
-  const results = $("#searchResults");
-
-  if (!q) {
-    results.replaceChildren();
-    suggest.replaceChildren();
-    // 候補: 気分プリセット + 最近の検索
-    const presets = [
-      { label: "90分以内で観たい", run: () => { resetFilters(); F.maxRuntime = 90; showView("library"); } },
-      { label: "高評価の未視聴", run: () => { resetFilters(); F.minRating = 8; F.watchState = "unwatched"; F.sort = "ratingDesc"; showView("library"); } },
-      { label: "積みっぱなしの映画", run: () => { resetFilters(); F.watchState = "unwatched"; F.sort = "backlog"; showView("library"); } },
-      { label: "お気に入りをもう一度", run: () => { resetFilters(); F.watchState = "favorite"; showView("library"); } }
-    ];
-    const g1 = document.createElement("div");
-    g1.className = "suggest-group";
-    g1.innerHTML = `<h3>こんな気分は？</h3>`;
-    const c1 = document.createElement("div");
-    c1.className = "suggest-chips";
-    presets.forEach((p) => {
-      const chip = document.createElement("button");
-      chip.type = "button";
-      chip.className = "suggest-chip";
-      chip.textContent = p.label;
-      chip.addEventListener("click", p.run);
-      c1.append(chip);
-    });
-    g1.append(c1);
-    suggest.append(g1);
-
-    const recents = recentSearches();
-    if (recents.length) {
-      const g2 = document.createElement("div");
-      g2.className = "suggest-group";
-      g2.innerHTML = `<h3>最近の検索</h3>`;
-      const c2 = document.createElement("div");
-      c2.className = "suggest-chips";
-      recents.forEach((r) => {
-        const chip = document.createElement("button");
-        chip.type = "button";
-        chip.className = "suggest-chip";
-        chip.innerHTML = `${escapeHtml(r)} <span class="sc-x">↗</span>`;
-        chip.addEventListener("click", () => { input.value = r; renderSearch(); });
-        c2.append(chip);
-      });
-      g2.append(c2);
-      suggest.append(g2);
-    }
-    return;
-  }
-
-  suggest.replaceChildren();
-  const hits = state.items.filter((i) => searchable(i).includes(q)).sort(sorter("ratingDesc"));
-  results.className = "poster-grid";
-  results.replaceChildren();
-  if (!hits.length) {
-    const none = document.createElement("div");
-    none.className = "empty";
-    none.innerHTML = `<div class="empty-mark">🔍</div><h2>「${escapeHtml(input.value.trim())}」に一致なし</h2><p>別のキーワードを試してみてください。</p>`;
-    results.append(none);
-    return;
-  }
-  hits.forEach((item) => results.append(createPosterCard(item)));
-}
-
 /* ============ PICKS ============ */
 // 未視聴からスコアで一本を選ぶ。理由も添える。
 function scoreItem(item) {
@@ -709,16 +672,41 @@ function openDetail(item) {
     content.append(scores);
   }
 
+  // 観られるサービス（正規化・重複排除済み）。タップで保存元は直接、他サービスは作品検索を開く
+  const services = watchServices(item);
+  if (services.length) {
+    const own = serviceKey(item);
+    const row = document.createElement("div");
+    row.className = "svc-chips";
+    services.forEach((svc) => {
+      const chip = document.createElement("a");
+      chip.className = `svc-chip svc-border-${svc.key}`;
+      chip.target = "_blank";
+      chip.rel = "noreferrer";
+      chip.href = svc.key === own && item.url ? item.url : (SERVICE_SEARCH[svc.key]?.(item.title) || item.providers?.link || "#");
+      if (svc.logo) {
+        const img = document.createElement("img");
+        img.src = svc.logo;
+        img.alt = "";
+        img.referrerPolicy = "no-referrer";
+        chip.append(img);
+      }
+      const name = document.createElement("b");
+      name.className = `svc-${svc.key}`;
+      name.textContent = svc.label;
+      const kind = document.createElement("small");
+      kind.textContent = svc.kind;
+      chip.append(name, kind);
+      row.append(chip);
+    });
+    content.append(row);
+  }
+  // 画質・音響は保存元サービスのページから取得したもの（サービスごとの値は取得できない）
   const qTags = item.quality ? [item.quality.video, item.quality.hdr, item.quality.audio].filter(Boolean) : [];
-  const provNames = item.providers ? [
-    ...(item.providers.flatrate || []).map((n) => `${n}（見放題）`),
-    ...[...new Set([...(item.providers.rent || []), ...(item.providers.buy || [])])].map((n) => `${n}（レンタル）`)
-  ] : [];
-  const badges = [...qTags, ...provNames.slice(0, 6)];
-  if (badges.length) {
+  if (qTags.length) {
     const bl = document.createElement("p");
     bl.className = "detail-badges";
-    bl.textContent = badges.join(" ・ ");
+    bl.textContent = `${serviceLabel(item)}: ${qTags.join("・")}`;
     content.append(bl);
   }
 
@@ -911,10 +899,6 @@ $("#libFilterBtn").addEventListener("click", () => {
   renderLibrary();
   if (facetsOpen) requestAnimationFrame(() => $("#libFacets").scrollIntoView({ behavior: "smooth", block: "nearest" }));
 });
-
-// 検索
-$("#searchInput").addEventListener("input", renderSearch);
-$("#searchInput").addEventListener("change", (e) => pushRecentSearch(e.target.value));
 
 // Picks 再抽選
 $("#reshuffle").addEventListener("click", () => { choosePick(true); state.pickDirty = false; renderPicks(); });
