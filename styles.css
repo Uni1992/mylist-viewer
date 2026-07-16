@@ -17,10 +17,17 @@
 }
 
 * { box-sizing: border-box; }
-html { scroll-behavior: smooth; }
+/* 画面全体のスクロールは.scrollコンテナだけに限定し、
+   本体のバウンス・意図しない横/縦スライドを完全に止める */
+html {
+  scroll-behavior: smooth;
+  overscroll-behavior: none;
+}
 body {
   margin: 0;
-  min-height: 100dvh;
+  height: 100dvh;
+  overflow: hidden;
+  overscroll-behavior: none;
   background: var(--bg);
   color: var(--ink);
   font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Hiragino Sans", "Noto Sans JP", system-ui, sans-serif;
@@ -50,8 +57,9 @@ button { transition: transform .25s var(--spring), background .2s var(--ease), c
   flex: 1;
   min-height: 0;
   overflow-y: auto;
+  overflow-x: hidden;
   -webkit-overflow-scrolling: touch;
-  overscroll-behavior-y: contain;
+  overscroll-behavior: contain;
   padding: 0 18px calc(var(--tabbar-h) + 20px);
 }
 .scroll > *:first-child { margin-top: 4px; }
@@ -643,36 +651,38 @@ button { transition: transform .25s var(--spring), background .2s var(--ease), c
 .empty p { margin: 0; color: var(--muted); line-height: 1.7; font-size: 13px; }
 .empty-mark { font-size: 40px; margin-bottom: 8px; }
 
-/* ---------- 件数ピル（Libraryで常時表示） ---------- */
-.count-pill {
-  position: fixed;
-  left: 50%;
-  transform: translateX(-50%);
-  bottom: calc(var(--tabbar-h) + 10px);
-  z-index: 40;
-  display: inline-flex;
+/* ---------- 件数行（Libraryヘッダー直下に常時表示） ---------- */
+.lib-count {
+  display: flex;
   align-items: center;
   gap: 8px;
-  max-width: calc(100vw - 32px);
-  min-height: 38px;
-  padding: 0 16px;
-  border: 1px solid color-mix(in srgb, var(--accent) 30%, var(--line));
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--bg) 80%, transparent);
-  backdrop-filter: blur(14px);
-  -webkit-backdrop-filter: blur(14px);
-  box-shadow: 0 8px 26px #000a;
-  pointer-events: none;
+  min-height: 34px;
+  margin: 0 18px 6px;
+  padding: 0 2px;
 }
-.count-pill span {
+.lib-count span {
+  flex: 0 1 auto;
+  min-width: 0;
   overflow: hidden;
   color: var(--muted);
-  font-size: 11.5px;
+  font-size: 12px;
   font-weight: 700;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.count-pill b { color: var(--accent); font-size: 14px; font-weight: 900; white-space: nowrap; }
+.lib-count b { color: var(--accent); font-size: 15px; font-weight: 900; white-space: nowrap; }
+.lib-count button {
+  flex: none;
+  margin-left: auto;
+  min-height: 28px;
+  padding: 0 10px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 750;
+}
 
 /* ---------- サービスロゴ（白モノクロで統一） ---------- */
 .svc-logo { height: 15px; width: auto; max-width: 92px; filter: brightness(0) invert(1); opacity: .95; }
@@ -835,6 +845,7 @@ dialog::backdrop { background: #05050acc; backdrop-filter: blur(6px); }
 @media (min-width: 620px) {
   .scroll { padding-left: max(18px, calc(50vw - 300px)); padding-right: max(18px, calc(50vw - 300px)); }
   .home-top, .view-top { padding-left: max(18px, calc(50vw - 300px)); padding-right: max(18px, calc(50vw - 300px)); }
+  .lib-count { margin-left: max(18px, calc(50vw - 300px)); margin-right: max(18px, calc(50vw - 300px)); }
   .poster-grid { grid-template-columns: repeat(4, 1fr); }
   .media-grid { grid-template-columns: repeat(4, 1fr); }
 }

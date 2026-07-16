@@ -80,6 +80,13 @@
           </div>
         </header>
 
+        <!-- 絞り込み条件と該当数（ヘッダー直下に常時表示） -->
+        <div class="lib-count" id="libCountLine">
+          <span id="cpConds"></span>
+          <b id="cpNum"></b>
+          <button id="resetFiltersBtn" type="button" hidden>× リセット</button>
+        </div>
+
         <div class="scroll" data-scroll="library">
           <label class="search-field">
             <span class="search-icon">🔍</span>
@@ -181,11 +188,6 @@
           <p class="settings-foot">TONITE · あなたの映画ライブラリ</p>
         </div>
       </section>
-    </div>
-
-    <!-- 現在の絞り込み条件と該当件数（Libraryで常時表示） -->
-    <div id="countPill" class="count-pill" hidden>
-      <span id="cpConds"></span><b id="cpNum"></b>
     </div>
 
     <!-- ============ BOTTOM NAV ============ -->

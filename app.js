@@ -1,6 +1,9 @@
 const $ = (selector, root = document) => root.querySelector(selector);
 const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
 
+// 設定画面に表示するアプリ版数。デプロイのたびに上げ、実機で更新が届いたか確認できるようにする
+const APP_VERSION = "3.3.0";
+
 const storageKey = "streaming-mobile-viewer-items";
 const legacyStorageKey = "unext-mobile-viewer-items";
 const deletedKey = "streaming-mobile-viewer-deleted";
@@ -285,7 +288,6 @@ function showView(name) {
   state.currentView = name;
   $$(".view").forEach((el) => { el.hidden = el.dataset.view !== name; });
   $$(".tab").forEach((tab) => tab.classList.toggle("is-active", tab.dataset.view === name));
-  $("#countPill").hidden = name !== "library";
   views[name]();
 }
 function renderAll() {
@@ -458,10 +460,11 @@ function renderLibrary() {
   $("#libCount").textContent = `${state.filtered.length}件`;
   $("#libEmpty").hidden = state.filtered.length > 0 || state.items.length === 0;
 
-  // 件数ピル: 「Netflix・映画・90分前後 → 18作品」を常時表示
+  // 件数行: 「Netflix・映画・90分前後 → 18作品」をヘッダー直下に常時表示
   const conds = activeConditionLabels();
   $("#cpConds").textContent = conds.length ? `${conds.join("・")} → ` : `全ライブラリ `;
   $("#cpNum").textContent = `${state.filtered.length}作品`;
+  $("#resetFiltersBtn").hidden = !hasActiveFilters();
 }
 
 function renderFacets() {
@@ -488,9 +491,22 @@ function renderFacets() {
     row.append(lab, chips);
     panel.append(row);
   };
-  const countMedia = (v) => state.items.filter((i) => (i.mediaType || "unknown") === v).length;
-  const countDur = (v) => state.items.filter((i) => durationKey(i.runtime) === v).length;
-  const countGenre = (v) => state.items.filter((i) => itemGenres(i).includes(v)).length;
+  // 連動カウント: その次元以外の「いまの絞り込み」を適用したうえでの該当数。
+  // Netflixを選ぶと、他の行の数字がNetflix内での件数に切り替わる。
+  const countNarrowed = (skipKeys, test) => {
+    const saved = {};
+    for (const k of skipKeys) { saved[k] = F[k]; F[k] = F_DEFAULTS[k]; }
+    const n = state.items.filter((i) => matches(i) && test(i)).length;
+    Object.assign(F, saved);
+    return n;
+  };
+  const countMedia = (v) => countNarrowed(["mediaType"], (i) => (i.mediaType || "unknown") === v);
+  const countWatch = (v) => countNarrowed(["watchState"], (i) => v === "unwatched" ? !i.watched : v === "watched" ? i.watched : i.favorite);
+  const countDur = (v) => countNarrowed(["duration", "maxRuntime"], (i) => durationKey(i.runtime) === v);
+  const countRating = (v) => countNarrowed(["minRating"], (i) => bestRating(i) >= v);
+  const countDecade = (v) => countNarrowed(["decade"], (i) => decadeKey(i.year) === v);
+  const countCountry = (v) => countNarrowed(["country"], (i) => (i.countries || []).includes(v));
+  const countGenre = (v) => countNarrowed(["genre"], (i) => itemGenres(i).includes(v));
 
   mkRow("大ジャンル", "media", [
     { value: "movie", label: "映画", count: countMedia("movie") },
@@ -500,9 +516,10 @@ function renderFacets() {
   ], F.mediaType, (v) => { F.mediaType = v; });
 
   mkRow("視聴状態", "watch", [
-    { value: "unwatched", label: "未視聴" },
-    { value: "watched", label: "視聴済み" },
-    { value: "favorite", label: "お気に入り" }
+    { value: "", label: "すべて" },
+    { value: "unwatched", label: "未視聴", count: countWatch("unwatched") },
+    { value: "watched", label: "視聴済み", count: countWatch("watched") },
+    { value: "favorite", label: "お気に入り", count: countWatch("favorite") }
   ], F.watchState, (v) => { F.watchState = v; });
 
   mkRow("上映時間", "duration", [
@@ -512,7 +529,6 @@ function renderFacets() {
     { value: "long", label: "140分以上", count: countDur("long") }
   ], F.duration, (v) => { F.duration = v; F.maxRuntime = 0; });
 
-  const countRating = (v) => state.items.filter((i) => bestRating(i) >= v).length;
   mkRow("評価", "rating", [
     { value: 7, label: "7.0+", count: countRating(7) },
     { value: 7.5, label: "7.5+", count: countRating(7.5) },
@@ -520,17 +536,16 @@ function renderFacets() {
     { value: 8.5, label: "8.5+", count: countRating(8.5) }
   ], F.minRating, (v) => { F.minRating = v || 0; });
 
-  const countDecade = (v) => state.items.filter((i) => decadeKey(i.year) === v).length;
   mkRow("公開年", "decade", ["2020s", "2010s", "2000s", "1990s", "1980s", "older"]
     .map((d) => ({ value: d, label: DECADE_LABELS[d], count: countDecade(d) }))
-    .filter((o) => o.count > 0), F.decade, (v) => { F.decade = v; });
+    .filter((o) => o.count > 0 || F.decade === o.value), F.decade, (v) => { F.decade = v; });
 
-  // 国: ライブラリに存在する制作国を件数順で（TMDB補完v7以降のデータ）
-  const countryCounts = {};
-  state.items.forEach((i) => (i.countries || []).forEach((c) => { countryCounts[c] = (countryCounts[c] || 0) + 1; }));
-  const countries = Object.entries(countryCounts).sort((a, b) => b[1] - a[1]).slice(0, 12);
+  // 国: ライブラリに存在する制作国（リストは全体の件数順、表示する数字は連動カウント）
+  const countryTotals = {};
+  state.items.forEach((i) => (i.countries || []).forEach((c) => { countryTotals[c] = (countryTotals[c] || 0) + 1; }));
+  const countries = Object.entries(countryTotals).sort((a, b) => b[1] - a[1]).slice(0, 12);
   if (countries.length) {
-    mkRow("国", "country", countries.map(([code, count]) => ({ value: code, label: countryLabel(code), count })), F.country, (v) => { F.country = v; });
+    mkRow("国", "country", countries.map(([code]) => ({ value: code, label: countryLabel(code), count: countCountry(code) })), F.country, (v) => { F.country = v; });
   }
 
   const genres = [...new Set(state.items.flatMap(itemGenres))].sort((a, b) => a.localeCompare(b, "ja"));
@@ -746,6 +761,7 @@ function renderSettings() {
   });
   const cfg = GistSync.getConfig();
   $("#settingsSyncState").textContent = cfg.token && cfg.gistId ? "接続済み" : "未設定";
+  $(".settings-foot").textContent = `TONITE v${APP_VERSION} · あなたの映画ライブラリ`;
 }
 
 /* ============ 詳細ダイアログ（従来ロジック維持） ============ */
@@ -1026,6 +1042,7 @@ $("#libFilterBtn").addEventListener("click", () => {
   renderLibrary();
   if (facetsOpen) requestAnimationFrame(() => $("#libFacets").scrollIntoView({ behavior: "smooth", block: "nearest" }));
 });
+$("#resetFiltersBtn").addEventListener("click", () => { resetFilters(); renderLibrary(); });
 
 // Picks 再抽選
 $("#reshuffle").addEventListener("click", () => { choosePick(true); state.pickDirty = false; renderPicks(); });
