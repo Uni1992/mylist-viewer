@@ -226,7 +226,9 @@ function createCard(item) {
   const card = $("#cardTemplate").content.firstElementChild.cloneNode(true);
   card.classList.toggle("is-watched", Boolean(item.watched));
   const poster = $(".poster", card);
-  const primaryImage = (serviceKey(item) === "prime" && item.tmdbImage) ? item.tmdbImage : (item.image || item.tmdbImage || "");
+  const primaryImage = item.imageLocked
+    ? item.image
+    : (serviceKey(item) === "prime" && item.tmdbImage) ? item.tmdbImage : (item.image || item.tmdbImage || "");
   if (primaryImage) poster.src = primaryImage;
   poster.alt = item.title ? `${item.title}のポスター` : "";
   poster.addEventListener("error", () => {
