@@ -10,6 +10,7 @@ const serviceNames = {
   disney: "Disney+",
   netflix: "Netflix",
   prime: "Prime Video",
+  appletv: "Apple TV",
   other: "その他"
 };
 
@@ -102,6 +103,7 @@ function serviceKey(item) {
   if (/netflix\.com/i.test(item?.url || "")) return "netflix";
   if (/disneyplus\.com/i.test(item?.url || "")) return "disney";
   if (/primevideo\.com|amazon\.(co\.jp|com)/i.test(item?.url || "")) return "prime";
+  if (/tv\.apple\.com/i.test(item?.url || "")) return "appletv";
   if (/unext\.jp/i.test(item?.url || "")) return "unext";
   return "other";
 }
@@ -255,6 +257,20 @@ function createCard(item) {
   if (item.rating) addScore("score-tmdb", `★ ${item.rating}`);
   if (item.imdbRating) addScore("score-imdb", `IMDb ${item.imdbRating}`);
   if (item.rtScore) addScore("score-rt", `🍅 ${item.rtScore}%`);
+
+  const qualWrap = $(".quality", card);
+  if (qualWrap && item.quality) {
+    const tags = [item.quality.video, item.quality.hdr, item.quality.audio].filter(Boolean);
+    if (tags.length) {
+      qualWrap.hidden = false;
+      tags.forEach((tag) => {
+        const pill = document.createElement("span");
+        pill.className = "qual" + (tag === "4K" ? " qual-4k" : "");
+        pill.textContent = tag;
+        qualWrap.append(pill);
+      });
+    }
+  }
 
   const provWrap = $(".providers", card);
   if (provWrap && item.providers) {
