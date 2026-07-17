@@ -2,13 +2,49 @@ const $ = (selector, root = document) => root.querySelector(selector);
 const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
 
 // 設定画面に表示するアプリ版数。デプロイのたびに上げ、実機で更新が届いたか確認できるようにする
-const APP_VERSION = "3.7.0";
+const APP_VERSION = "3.8.0";
 
 const storageKey = "streaming-mobile-viewer-items";
 const legacyStorageKey = "unext-mobile-viewer-items";
 const deletedKey = "streaming-mobile-viewer-deleted";
 const syncConfigKey = "streaming-mobile-viewer-sync";
 const savedViewsKey = "tonite-saved-views";
+
+// 作品データはIndexedDBに保存する。
+// iOSのlocalStorageは約5MBしかなく、ライブラリが育つと「The quota has been exceeded」で同期が失敗する
+const idb = (() => {
+  let dbPromise = null;
+  function open() {
+    if (!dbPromise) {
+      dbPromise = new Promise((resolve, reject) => {
+        const request = indexedDB.open("tonite", 1);
+        request.onupgradeneeded = () => request.result.createObjectStore("kv");
+        request.onsuccess = () => resolve(request.result);
+        request.onerror = () => reject(request.error);
+      });
+    }
+    return dbPromise;
+  }
+  return {
+    async get(key) {
+      const db = await open();
+      return new Promise((resolve, reject) => {
+        const req = db.transaction("kv").objectStore("kv").get(key);
+        req.onsuccess = () => resolve(req.result);
+        req.onerror = () => reject(req.error);
+      });
+    },
+    async set(key, value) {
+      const db = await open();
+      return new Promise((resolve, reject) => {
+        const tx = db.transaction("kv", "readwrite");
+        tx.objectStore("kv").put(value, key);
+        tx.oncomplete = () => resolve();
+        tx.onerror = () => reject(tx.error);
+      });
+    }
+  };
+})();
 
 const state = { items: [], filtered: [], deleted: {}, currentView: "home", pick: null };
 
@@ -283,8 +319,14 @@ function resetFilters() {
 
 /* ============ 保存・更新 ============ */
 function saveItems() {
-  localStorage.setItem(storageKey, JSON.stringify(state.items));
-  localStorage.setItem(deletedKey, JSON.stringify(state.deleted));
+  // IndexedDBへ非同期保存（容量制限に強い）。失敗時のみ画面に知らせる
+  idb.set("items", state.items).catch(() => {
+    const status = $("#syncStatus");
+    status.hidden = false;
+    status.classList.add("is-error");
+    status.textContent = "端末への保存に失敗しました（空き容量を確認してください）";
+  });
+  idb.set("deleted", state.deleted).catch(() => {});
 }
 function patchItem(id, patch) {
   const item = state.items.find((entry) => entry.id === id);
@@ -923,15 +965,29 @@ function openDetail(item) {
 }
 
 /* ============ 読み込み ============ */
-function loadStoredItems() {
+async function loadStoredItems() {
+  // まずIndexedDBから。無ければ旧localStorageから読み込んで移行し、容量を解放する
   try {
-    const stored = JSON.parse(localStorage.getItem(storageKey) || localStorage.getItem(legacyStorageKey) || "[]");
+    let stored = await idb.get("items");
+    let deleted = await idb.get("deleted");
+    if (!Array.isArray(stored)) {
+      try { stored = JSON.parse(localStorage.getItem(storageKey) || localStorage.getItem(legacyStorageKey) || "[]"); } catch { stored = []; }
+      try { deleted = JSON.parse(localStorage.getItem(deletedKey) || "{}"); } catch { deleted = {}; }
+      if (Array.isArray(stored) && stored.length) {
+        await idb.set("items", stored);
+        await idb.set("deleted", deleted && typeof deleted === "object" ? deleted : {});
+        // 移行完了後にlocalStorageを空けて「quota exceeded」を根治する
+        localStorage.removeItem(storageKey);
+        localStorage.removeItem(legacyStorageKey);
+        localStorage.removeItem(deletedKey);
+      }
+    }
     state.items = Array.isArray(stored) ? stored.map(normalizeItem) : [];
-  } catch { state.items = []; }
-  try {
-    const deleted = JSON.parse(localStorage.getItem(deletedKey) || "{}");
     state.deleted = deleted && typeof deleted === "object" && !Array.isArray(deleted) ? deleted : {};
-  } catch { state.deleted = {}; }
+  } catch {
+    state.items = [];
+    state.deleted = {};
+  }
   showView(state.currentView);
 }
 
@@ -984,6 +1040,7 @@ const GistSync = (() => {
       }
       return "GitHubトークンが認証されませんでした（失効・削除・コピーミスの可能性）。一番確実なのは、PC拡張の設定画面に保存されている動作中のトークンをそのままコピーすることです";
     }
+    if (/quota.*exceeded/i.test(raw)) return "端末の保存容量が足りませんでした。アプリを再読み込みすると保存先が移行されて直ります";
     if (/404/.test(raw)) return "Gistが見つかりません。Gist IDが正しいか、トークンにgistスコープがあるか確認してください";
     if (/403/.test(raw)) return "GitHubに拒否されました（レート制限の可能性）。しばらくしてからもう一度";
     if (/Failed to fetch|Load failed|NetworkError|abort/i.test(raw)) return "ネットワークに接続できません。電波の良い場所で「いま同期する」を試してください";
@@ -1219,5 +1276,4 @@ if ("serviceWorker" in navigator && location.protocol !== "file:") {
   navigator.serviceWorker.register("sw.js").catch(() => {});
 }
 
-loadStoredItems();
-GistSync.syncNow();
+loadStoredItems().then(() => GistSync.syncNow());

@@ -22,17 +22,17 @@
 html {
   scroll-behavior: smooth;
   overscroll-behavior: none;
-  overflow-x: hidden;
-  width: 100%;
+  overflow: hidden;
+  height: 100%;
 }
 body {
+  /* inset:0 でビューポートそのものに固定する。100dvh/100vhはSafariのツールバー分だけ
+     実際の表示より大きく計算されることがあり、上下（ロゴ/タブバー）が見切れる原因になる */
   margin: 0;
-  width: 100%;
-  height: 100dvh;
-  overflow: hidden;
-  overscroll-behavior: none;
   position: fixed;
   inset: 0;
+  overflow: hidden;
+  overscroll-behavior: none;
   background: var(--bg);
   color: var(--ink);
   font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Hiragino Sans", "Noto Sans JP", system-ui, sans-serif;
@@ -47,9 +47,10 @@ button:active { transform: scale(.95); }
 button { transition: transform .25s var(--spring), background .2s var(--ease), color .2s var(--ease), border-color .2s var(--ease), box-shadow .2s var(--ease); }
 
 /* ---------- App / views ---------- */
-.app { min-height: 100dvh; }
+.app { height: 100%; }
 .view {
-  position: fixed;
+  /* bodyがビューポートに固定されているので、その中に絶対配置で収める */
+  position: absolute;
   inset: 0;
   display: flex;
   flex-direction: column;
@@ -578,7 +579,7 @@ button { transition: transform .25s var(--spring), background .2s var(--ease), c
 .pick-hero .ph-poster {
   position: relative;
   aspect-ratio: 3/4;
-  max-height: 46dvh;
+  max-height: 44svh;
   width: 100%;
   object-fit: cover;
   background: var(--surface-3);
@@ -725,7 +726,7 @@ button { transition: transform .25s var(--spring), background .2s var(--ease), c
 
 /* ---------- Tab bar ---------- */
 .tabbar {
-  position: fixed;
+  position: absolute;
   left: 0;
   right: 0;
   bottom: 0;
@@ -758,9 +759,10 @@ button { transition: transform .25s var(--spring), background .2s var(--ease), c
 
 /* ---------- Dialogs ---------- */
 dialog {
-  /* 画面を覆い尽くさないよう、幅・高さともに余白を残したコンパクトなカードにする */
+  /* 画面を覆い尽くさないよう、幅・高さともに余白を残したコンパクトなカードにする。
+     svh=ツールバー表示時でも必ず見えている高さ基準 */
   width: min(100% - 44px, 440px);
-  max-height: 76dvh;
+  max-height: 72svh;
   padding: 0;
   border: 1px solid #34343a;
   border-radius: 20px;
@@ -788,7 +790,7 @@ dialog::backdrop { background: #05050acc; backdrop-filter: blur(6px); }
 }
 .dialog-close:hover { background: #000000cc; }
 .detail-card {
-  max-height: 76dvh;
+  max-height: 72svh;
   overflow-y: auto;
   overflow-x: hidden;
   /* 中身がこれ以上ない位置での「遊び」(バウンス)を無くす */
@@ -796,7 +798,7 @@ dialog::backdrop { background: #05050acc; backdrop-filter: blur(6px); }
   touch-action: pan-y;
   padding: 16px;
 }
-.detail-card img { width: 100%; max-height: 32dvh; border-radius: 14px; background: var(--surface-3); object-fit: cover; }
+.detail-card img { width: 100%; max-height: 30svh; border-radius: 14px; background: var(--surface-3); object-fit: cover; }
 .detail-card h2 { margin: 12px 0 6px; font-size: 21px; font-weight: 900; }
 .detail-card p { color: var(--muted); line-height: 1.75; }
 .detail-card .detail-meta { margin: 2px 0 8px; font-size: 12px; letter-spacing: .03em; }

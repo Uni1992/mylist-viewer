@@ -1,4 +1,4 @@
-const cacheName = "tonite-viewer-v22";
+const cacheName = "tonite-viewer-v23";
 const assets = [
   "./",
   "./index.html",
