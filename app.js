@@ -2,7 +2,7 @@ const $ = (selector, root = document) => root.querySelector(selector);
 const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
 
 // 設定画面に表示するアプリ版数。デプロイのたびに上げ、実機で更新が届いたか確認できるようにする
-const APP_VERSION = "3.9.0";
+const APP_VERSION = "3.10.0";
 
 const storageKey = "streaming-mobile-viewer-items";
 const legacyStorageKey = "unext-mobile-viewer-items";
@@ -963,9 +963,11 @@ function openDetail(item) {
     const own = serviceKey(item);
     const row = document.createElement("div");
     row.className = "svc-chips";
+    // 配信区分の色分け（PCと共通ルール）: 見放題=緑 / 無料=青 / レンタル・ポイント=橙
+    const kindClassOf = (kind) => /無料/.test(kind) ? "free" : /レンタル|購入|ポイント/.test(kind) ? "paid" : "flat";
     services.forEach((svc) => {
       const chip = document.createElement("a");
-      chip.className = "svc-chip";
+      chip.className = `svc-chip k-${kindClassOf(svc.kind)}`;
       chip.target = "_blank";
       chip.rel = "noreferrer";
       chip.setAttribute("aria-label", `${svc.label}で観る（${svc.kind}）`);
@@ -1048,6 +1050,9 @@ function openDetail(item) {
   actions.append(fav, watchedBtn, trailer);
   content.append(actions);
   $("#detailDialog").showModal();
+  // ダイアログは再利用されるため、常に最上部（ポスター）から表示する
+  content.scrollTop = 0;
+  requestAnimationFrame(() => { content.scrollTop = 0; });
 }
 
 /* ============ 読み込み ============ */

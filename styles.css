@@ -822,6 +822,13 @@ dialog::backdrop { background: #05050acc; backdrop-filter: blur(6px); }
   color: var(--ink);
 }
 .svc-chip { transition: transform .2s var(--spring), background .15s var(--ease), border-color .15s var(--ease); }
+/* 配信区分の色分け（PCと共通ルール）: 見放題=緑 / 無料=青 / レンタル・ポイント=橙 */
+.svc-chip.k-flat { border-color: #2f6c47; background: #12261a; }
+.svc-chip.k-flat small { color: #7ce0a3; }
+.svc-chip.k-free { border-color: #2f4a6c; background: #101c2a; }
+.svc-chip.k-free small { color: #7ab8ff; }
+.svc-chip.k-paid { border-color: #6c4f2f; background: #261d10; }
+.svc-chip.k-paid small { color: #e8b566; }
 .svc-chip:active {
   transform: scale(.92);
   border-color: var(--accent);
