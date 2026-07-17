@@ -2,7 +2,7 @@ const $ = (selector, root = document) => root.querySelector(selector);
 const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
 
 // 設定画面に表示するアプリ版数。デプロイのたびに上げ、実機で更新が届いたか確認できるようにする
-const APP_VERSION = "3.10.0";
+const APP_VERSION = "3.11.0";
 
 const storageKey = "streaming-mobile-viewer-items";
 const legacyStorageKey = "unext-mobile-viewer-items";
@@ -82,8 +82,8 @@ function watchServices(item) {
       map.set(key, { key, label: serviceLabel(key), kind, logo: logos[name] || null });
     }
   };
-  add(item.providers?.flatrate, "見放題");
-  add([...(item.providers?.free || []), ...(item.providers?.ads || [])], "無料");
+  // 「無料(広告つき)」も追加料金なしという実態は見放題と同じなので、まとめて「見放題」とする
+  add([...(item.providers?.flatrate || []), ...(item.providers?.free || []), ...(item.providers?.ads || [])], "見放題");
   add([...(item.providers?.rent || []), ...(item.providers?.buy || [])], "レンタル");
   const own = serviceKey(item);
   if (own !== "other" && !map.has(own)) {
@@ -359,6 +359,11 @@ function dedupeForDisplay(list) {
   return out;
 }
 
+// 代表カードか、その重複分のどれかが条件を満たすか（集計用）
+function repMatches(rep, test) {
+  return test(rep) || (rep._dupes || []).some(test);
+}
+
 function applyFilters() {
   state.filtered = dedupeForDisplay(state.items.filter(matches).sort(sorter(F.sort)));
   return state.filtered;
@@ -424,7 +429,10 @@ const COLLECTIONS = [
 ];
 
 function renderHome() {
-  $("#homeCount").textContent = state.items.length;
+  // 集計はすべて重複統合後のユニーク作品数で統一する
+  const reps = dedupeForDisplay(state.items);
+  const uniqueCount = (test) => reps.filter((rep) => repMatches(rep, test)).length;
+  $("#homeCount").textContent = reps.length;
   const hasItems = state.items.length > 0;
   $("#homeEmpty").hidden = hasItems;
   $$("#homeMediaCards, .section-head, #homeCollections, #homeServices, .home-pick").forEach(() => {});
@@ -433,7 +441,7 @@ function renderHome() {
   const mediaBox = $("#homeMediaCards");
   mediaBox.replaceChildren();
   [["movie", "映画"], ["drama", "ドラマ"], ["anime", "アニメ"], ["documentary", "ドキュメンタリー"]].forEach(([key, label]) => {
-    const count = state.items.filter((i) => (i.mediaType || "unknown") === key).length;
+    const count = uniqueCount((i) => (i.mediaType || "unknown") === key);
     const card = document.createElement("button");
     card.type = "button";
     card.className = "media-card" + (count ? "" : " is-empty");
@@ -446,7 +454,7 @@ function renderHome() {
   const colBox = $("#homeCollections");
   colBox.replaceChildren();
   COLLECTIONS.forEach((col) => {
-    const count = state.items.filter(col.test).length;
+    const count = uniqueCount(col.test);
     if (!count && col.id !== "recent") return;
     const row = document.createElement("button");
     row.type = "button";
@@ -462,7 +470,7 @@ function renderHome() {
   const svcBox = $("#homeServices");
   svcBox.replaceChildren();
   const svcCounts = {};
-  state.items.forEach((i) => { const k = serviceKey(i); svcCounts[k] = (svcCounts[k] || 0) + 1; });
+  [...new Set(state.items.map(serviceKey))].forEach((k) => { svcCounts[k] = uniqueCount((i) => serviceKey(i) === k); });
   Object.entries(svcCounts).sort((a, b) => b[1] - a[1]).forEach(([key, count]) => {
     const card = document.createElement("button");
     card.type = "button";
@@ -614,7 +622,8 @@ function renderFacets() {
   const countNarrowed = (skipKeys, test) => {
     const saved = {};
     for (const k of skipKeys) { saved[k] = F[k]; F[k] = F_DEFAULTS[k]; }
-    const n = state.items.filter((i) => matches(i) && test(i)).length;
+    // 重複統合後のユニーク作品数で数える（件数ピルやグリッドの数字と必ず一致させる）
+    const n = dedupeForDisplay(state.items.filter(matches)).filter((rep) => repMatches(rep, test)).length;
     Object.assign(F, saved);
     return n;
   };
@@ -963,8 +972,8 @@ function openDetail(item) {
     const own = serviceKey(item);
     const row = document.createElement("div");
     row.className = "svc-chips";
-    // 配信区分の色分け（PCと共通ルール）: 見放題=緑 / 無料=青 / レンタル・ポイント=橙
-    const kindClassOf = (kind) => /無料/.test(kind) ? "free" : /レンタル|購入|ポイント/.test(kind) ? "paid" : "flat";
+    // 配信区分の色分け（PCと共通・赤緑色弱でも判別できる2色）: 見放題=青 / レンタル・ポイント=橙
+    const kindClassOf = (kind) => /レンタル|購入|ポイント/.test(kind) ? "paid" : "flat";
     services.forEach((svc) => {
       const chip = document.createElement("a");
       chip.className = `svc-chip k-${kindClassOf(svc.kind)}`;
