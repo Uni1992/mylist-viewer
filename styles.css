@@ -822,11 +822,11 @@ dialog::backdrop { background: #05050acc; backdrop-filter: blur(6px); }
   color: var(--ink);
 }
 .svc-chip { transition: transform .2s var(--spring), background .15s var(--ease), border-color .15s var(--ease); }
-/* 配信区分の色分け（PCと共通・赤緑色弱でも判別できる青×橙）: 見放題=青 / レンタル・ポイント=橙 */
-.svc-chip.k-flat, .svc-chip.k-free { border-color: #3d68a8; background: #101c2e; }
-.svc-chip.k-flat small, .svc-chip.k-free small { color: #85bcff; }
-.svc-chip.k-paid { border-color: #a8763d; background: #2a1f0e; }
-.svc-chip.k-paid small { color: #f0b566; }
+/* 配信区分の色分け（PCと共通・赤緑色弱でも判別できる橙×青）: 見放題=橙 / レンタル・ポイント=青 */
+.svc-chip.k-flat, .svc-chip.k-free { border-color: #a8763d; background: #2a1f0e; }
+.svc-chip.k-flat small, .svc-chip.k-free small { color: #f0b566; }
+.svc-chip.k-paid { border-color: #3d68a8; background: #101c2e; }
+.svc-chip.k-paid small { color: #85bcff; }
 .svc-chip:active {
   transform: scale(.92);
   border-color: var(--accent);

@@ -2,7 +2,7 @@ const $ = (selector, root = document) => root.querySelector(selector);
 const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
 
 // 設定画面に表示するアプリ版数。デプロイのたびに上げ、実機で更新が届いたか確認できるようにする
-const APP_VERSION = "3.11.0";
+const APP_VERSION = "3.12.0";
 
 const storageKey = "streaming-mobile-viewer-items";
 const legacyStorageKey = "unext-mobile-viewer-items";
