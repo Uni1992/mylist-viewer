@@ -2,7 +2,7 @@ const $ = (selector, root = document) => root.querySelector(selector);
 const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
 
 // 設定画面に表示するアプリ版数。デプロイのたびに上げ、実機で更新が届いたか確認できるようにする
-const APP_VERSION = "3.6.0";
+const APP_VERSION = "3.7.0";
 
 const storageKey = "streaming-mobile-viewer-items";
 const legacyStorageKey = "unext-mobile-viewer-items";
@@ -64,6 +64,13 @@ const SERVICE_SEARCH = {
   unext: (t) => `https://video.unext.jp/freeword?query=${encodeURIComponent(t)}`,
   appletv: (t) => `https://tv.apple.com/jp/search?term=${encodeURIComponent(t)}`
 };
+// 視聴リンク: インストール済みアプリで開けるようにする。
+// NetflixはURLスキーム(nflx://)で直接アプリ起動、他はユニバーサルリンク(httpsのままでもiOSがアプリに引き渡す)
+function watchUrlFor(key, item, own) {
+  const direct = key === own && item.url ? item.url : (SERVICE_SEARCH[key]?.(item.title) || item.providers?.link || "#");
+  if (key === "netflix") return direct.replace(/^https?:\/\/(www\.)?netflix\.com/, "nflx://www.netflix.com");
+  return direct;
+}
 
 // 絞り込みの状態（唯一の真実）。DOMではなくここを源にする。
 const F = {
@@ -851,7 +858,7 @@ function openDetail(item) {
       chip.target = "_blank";
       chip.rel = "noreferrer";
       chip.setAttribute("aria-label", `${svc.label}で観る（${svc.kind}）`);
-      chip.href = svc.key === own && item.url ? item.url : (SERVICE_SEARCH[svc.key]?.(item.title) || item.providers?.link || "#");
+      chip.href = watchUrlFor(svc.key, item, own);
       // 横長の公式ワードマークロゴ（白マスク・大きめで視認性を確保）
       const logo = serviceLogoEl(svc.key, 18);
       if (logo) {
@@ -909,12 +916,8 @@ function openDetail(item) {
   trailer.type = "button";
   trailer.textContent = "▶ 予告編";
   trailer.addEventListener("click", () => openTrailer(item));
-  const watch = document.createElement("a");
-  watch.href = item.url || "https://video.unext.jp/";
-  watch.target = "_blank";
-  watch.rel = "noreferrer";
-  watch.textContent = `${serviceLabel(item)}で観る`;
-  actions.append(fav, watchedBtn, trailer, watch);
+  // 「観る」ボタンは廃止。視聴は上の配信サービスチップから（複数サービスに対応）
+  actions.append(fav, watchedBtn, trailer);
   content.append(actions);
   $("#detailDialog").showModal();
 }
@@ -973,8 +976,15 @@ const GistSync = (() => {
   // 同期エラーを原因別のわかりやすい日本語にする
   function friendlySyncError(message) {
     const raw = String(message || "");
-    if (/401/.test(raw)) return "GitHubトークンが無効か期限切れです。新しいトークンを作成して設定に保存してください";
-    if (/404/.test(raw)) return "Gistが見つかりません。Gist IDが正しいか確認してください";
+    if (/401/.test(raw)) {
+      const token = getConfig().token || "";
+      // 新形式(fine-grained)トークンはGist APIに対応していない。401の一番ありがちな原因
+      if (token.startsWith("github_pat_")) {
+        return "このトークンは新形式(fine-grained)のため、Gist APIでは使えません。GitHubで「Tokens (classic)」からgistスコープ付きのトークン(ghp_で始まる)を作成するか、PC拡張に保存済みの動いているトークンをそのままコピーしてください";
+      }
+      return "GitHubトークンが認証されませんでした（失効・削除・コピーミスの可能性）。一番確実なのは、PC拡張の設定画面に保存されている動作中のトークンをそのままコピーすることです";
+    }
+    if (/404/.test(raw)) return "Gistが見つかりません。Gist IDが正しいか、トークンにgistスコープがあるか確認してください";
     if (/403/.test(raw)) return "GitHubに拒否されました（レート制限の可能性）。しばらくしてからもう一度";
     if (/Failed to fetch|Load failed|NetworkError|abort/i.test(raw)) return "ネットワークに接続できません。電波の良い場所で「いま同期する」を試してください";
     return raw;
@@ -1186,7 +1196,13 @@ $("#settingsSyncNow").addEventListener("click", () => {
 $("#syncCancel").addEventListener("click", () => $("#syncDialog").close());
 $("#syncForm").addEventListener("submit", (event) => {
   event.preventDefault();
-  GistSync.setConfig({ token: $("#syncToken").value.trim(), gistId: $("#syncGistId").value.trim() });
+  const token = $("#syncToken").value.trim();
+  // 保存前にトークン形式をチェックして、間違った種類のトークンで悩まないようにする
+  if (token.startsWith("github_pat_")) {
+    alert("このトークンは新形式(fine-grained)のため、Gist同期では使えません。\nGitHubの「Tokens (classic)」でgistスコープ付きのトークン(ghp_で始まる)を作成してください。\nPC拡張で同期できているなら、そのトークンをコピーするのが確実です。");
+    return;
+  }
+  GistSync.setConfig({ token, gistId: $("#syncGistId").value.trim() });
   $("#syncDialog").close();
   GistSync.syncNow();
 });
