@@ -2,7 +2,7 @@ const $ = (selector, root = document) => root.querySelector(selector);
 const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
 
 // 設定画面に表示するアプリ版数。デプロイのたびに上げ、実機で更新が届いたか確認できるようにする
-const APP_VERSION = "3.8.0";
+const APP_VERSION = "3.9.0";
 
 const storageKey = "streaming-mobile-viewer-items";
 const legacyStorageKey = "unext-mobile-viewer-items";
@@ -89,8 +89,18 @@ function watchServices(item) {
   if (own !== "other" && !map.has(own)) {
     map.set(own, { key: own, label: serviceLabel(item), kind: item.access || "保存元", logo: null });
   }
-  // 保存元サービスを先頭に
-  return [...map.values()].sort((a, b) => (a.key === own ? -1 : 0) - (b.key === own ? -1 : 0));
+  // 他サービスで取り込んだ同一作品（_dupes）も保存元として統合。作品ページへの直接URLを持てる
+  const directUrls = { [own]: item.url || null };
+  for (const dupe of item._dupes || []) {
+    const dupeKey = serviceKey(dupe);
+    if (dupeKey === "other") continue;
+    directUrls[dupeKey] = directUrls[dupeKey] || dupe.url || null;
+    if (!map.has(dupeKey)) map.set(dupeKey, { key: dupeKey, label: serviceLabel(dupe), kind: dupe.access || "保存元", logo: null });
+  }
+  // 保存元サービスを先頭に。直接URLがあるサービスにはそれを添える
+  return [...map.values()]
+    .map((svc) => ({ ...svc, url: directUrls[svc.key] || null }))
+    .sort((a, b) => (a.key === own ? -1 : 0) - (b.key === own ? -1 : 0));
 }
 // 保存元以外のサービスへは、そのサービス内の作品検索ページを開く（直接URLは持っていないため）
 const SERVICE_SEARCH = {
@@ -321,8 +331,36 @@ function sorter(key) {
   if (key === "backlog") return (a, b) => (Date.parse(a.importedAt) || 0) - (Date.parse(b.importedAt) || 0);
   return (a, b) => (a.addedOrder ?? 999999) - (b.addedOrder ?? 999999);
 }
+// 同一作品の重複判定キー（タイトルの表記ゆれを吸収。年は±1でグルーピング時に判定）
+function dupKey(item) {
+  return String(item.title || "")
+    .replace(/（[^）]*）|\([^)]*\)|【[^】]*】/g, " ")
+    .replace(/[\s・･·:：!！?？。、,，._／/－‐–—〜~\-]/g, "")
+    .toLocaleLowerCase("ja");
+}
+// 複数サービスで取り込んだ同一作品を1枚に統合する（例: ヘイル・メアリーがU-NEXTとPrimeの両方にある）。
+// 代表カードに _dupes として他サービス分をぶら下げ、詳細で両方の保存元を見せる
+function dedupeForDisplay(list) {
+  const groups = new Map();
+  const out = [];
+  for (const item of list) {
+    const key = dupKey(item);
+    const bucket = groups.get(key) || [];
+    const primary = bucket.find((p) => !p.year || !item.year || Math.abs(p.year - item.year) <= 1);
+    if (primary) {
+      primary._dupes.push(item);
+    } else {
+      const rep = Object.assign(Object.create(Object.getPrototypeOf(item)), item, { _dupes: [] });
+      bucket.push(rep);
+      groups.set(key, bucket);
+      out.push(rep);
+    }
+  }
+  return out;
+}
+
 function applyFilters() {
-  state.filtered = state.items.filter(matches).sort(sorter(F.sort));
+  state.filtered = dedupeForDisplay(state.items.filter(matches).sort(sorter(F.sort)));
   return state.filtered;
 }
 const F_DEFAULTS = { query: "", mediaType: "", service: "", genre: "", duration: "", watchState: "", maxRuntime: 0, minRating: 0, expiringSoon: false, decade: "", country: "", sort: "added" };
@@ -345,7 +383,17 @@ function patchItem(id, patch) {
   const item = state.items.find((entry) => entry.id === id);
   if (!item) return;
   const now = new Date().toISOString();
-  Object.assign(item, patch, { stateUpdatedAt: now, updatedAt: now });
+  // 視聴状態・お気に入りは、他サービスで取り込んだ同一作品にも揃えて反映する
+  const targets = [item];
+  if ("watched" in patch || "favorite" in patch) {
+    const key = dupKey(item);
+    for (const other of state.items) {
+      if (other.id !== id && dupKey(other) === key && (!other.year || !item.year || Math.abs(other.year - item.year) <= 1)) {
+        targets.push(other);
+      }
+    }
+  }
+  targets.forEach((target) => Object.assign(target, patch, { stateUpdatedAt: now, updatedAt: now }));
   saveItems();
   renderAll();
   GistSync.scheduleSync();
@@ -921,7 +969,8 @@ function openDetail(item) {
       chip.target = "_blank";
       chip.rel = "noreferrer";
       chip.setAttribute("aria-label", `${svc.label}で観る（${svc.kind}）`);
-      const httpsUrl = watchUrlFor(svc.key, item, own);
+      // 直接URL（保存元・重複分）を最優先、無ければサービス内検索
+      const httpsUrl = svc.url || watchUrlFor(svc.key, item, own);
       chip.href = httpsUrl;
       // アプリで開く（スキーム起動→ダメならブラウザ）
       chip.addEventListener("click", (event) => {
@@ -945,12 +994,15 @@ function openDetail(item) {
     });
     content.append(row);
   }
-  // 画質・音響は保存元サービスのページから取得したもの（サービスごとの値は取得できない）
-  const qTags = item.quality ? [item.quality.video, item.quality.hdr, item.quality.audio].filter(Boolean) : [];
-  if (qTags.length) {
+  // 画質・音響: 保存元サービスのページから取得できた分をサービス名付きで全て表示
+  // （例: 同一作品がPrimeにもある場合、Prime側のUHD表記もここに出る）
+  const qualityLines = [item, ...(item._dupes || [])]
+    .map((entry) => ({ label: serviceLabel(entry), tags: entry.quality ? [entry.quality.video, entry.quality.hdr, entry.quality.audio].filter(Boolean) : [] }))
+    .filter((line) => line.tags.length);
+  if (qualityLines.length) {
     const bl = document.createElement("p");
     bl.className = "detail-badges";
-    bl.textContent = `${serviceLabel(item)}: ${qTags.join("・")}`;
+    bl.textContent = qualityLines.map((line) => `${line.label}: ${line.tags.join("・")}`).join("　");
     content.append(bl);
   }
 
