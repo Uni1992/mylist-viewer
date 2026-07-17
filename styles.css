@@ -65,8 +65,9 @@ button { transition: transform .25s var(--spring), background .2s var(--ease), c
   overflow-y: auto;
   overflow-x: hidden;
   -webkit-overflow-scrolling: touch;
-  /* none: 端に達した後の「ぐわんぐわん」(ラバーバンド)も抑止する */
-  overscroll-behavior: none;
+  /* 横はガッチリ固定、縦は自然な遊び(バウンス)を残しつつ親への伝播は止める */
+  overscroll-behavior-x: none;
+  overscroll-behavior-y: contain;
   /* 縦パンのみ許可。横スワイプでページ全体が動くのを防ぐ（横スクロールする行は個別にpan-xを許可） */
   touch-action: pan-y;
   padding: 0 18px calc(var(--tabbar-h) + 20px);
@@ -793,8 +794,9 @@ dialog::backdrop { background: #05050acc; backdrop-filter: blur(6px); }
   max-height: 72svh;
   overflow-y: auto;
   overflow-x: hidden;
-  /* 中身がこれ以上ない位置での「遊び」(バウンス)を無くす */
-  overscroll-behavior: none;
+  /* 縦は少しの遊びを残し、背景への伝播だけ止める。横は固定 */
+  overscroll-behavior-x: none;
+  overscroll-behavior-y: contain;
   touch-action: pan-y;
   padding: 16px;
 }
@@ -833,6 +835,8 @@ dialog::backdrop { background: #05050acc; backdrop-filter: blur(6px); }
 .svc-appletv { color: #eaeaea; }
 .svc-unext { color: #ffd25b; }
 .detail-card .detail-note { margin: 10px 0 0; padding: 9px 11px; border-left: 2px solid var(--accent); background: #ffffff08; font-size: 13px; }
+.detail-card .detail-tagline { margin: 2px 0 6px; color: var(--ink); font-size: 13px; font-style: italic; opacity: .85; }
+.detail-card .detail-awards { margin: 4px 0 6px; color: #f5c518; font-size: 12.5px; font-weight: 700; line-height: 1.6; }
 .detail-actions {
   position: sticky;
   bottom: -18px;

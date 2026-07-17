@@ -59,13 +59,13 @@ const serviceNames = {
 const serviceShort = { unext: "U-NEXT", disney: "Disney+", netflix: "Netflix", prime: "Prime", appletv: "Apple TV", other: "その他" };
 const mediaLabels = { movie: "映画", drama: "ドラマシリーズ", anime: "アニメ", unknown: "未分類" };
 
-// JustWatch由来のプロバイダ名を自分のサービスに正規化する（"Netflix Standard with Ads"や"Amazon Video"の乱立を防ぐ）
+// JustWatch由来のプロバイダ名を自分のサービスに正規化する（"Netflix Standard with Ads"や"Amazon Video"の乱立を防ぐ）。
+// Apple TVは意図的に除外: JustWatchのApple TVはレンタル/購入ストアで、マイリスト管理の対象外
 const PROVIDER_CANON = [
   { re: /netflix/i, key: "netflix" },
   { re: /amazon|prime/i, key: "prime" },
   { re: /disney/i, key: "disney" },
-  { re: /u-?next/i, key: "unext" },
-  { re: /apple\s*tv/i, key: "appletv" }
+  { re: /u-?next/i, key: "unext" }
 ];
 function canonProviderKey(name) {
   for (const p of PROVIDER_CANON) if (p.re.test(name)) return p.key;
@@ -100,12 +100,25 @@ const SERVICE_SEARCH = {
   unext: (t) => `https://video.unext.jp/freeword?query=${encodeURIComponent(t)}`,
   appletv: (t) => `https://tv.apple.com/jp/search?term=${encodeURIComponent(t)}`
 };
-// 視聴リンク: インストール済みアプリで開けるようにする。
-// NetflixはURLスキーム(nflx://)で直接アプリ起動、他はユニバーサルリンク(httpsのままでもiOSがアプリに引き渡す)
+// 視聴リンク: httpsの通常URL（フォールバック用）
 function watchUrlFor(key, item, own) {
-  const direct = key === own && item.url ? item.url : (SERVICE_SEARCH[key]?.(item.title) || item.providers?.link || "#");
-  if (key === "netflix") return direct.replace(/^https?:\/\/(www\.)?netflix\.com/, "nflx://www.netflix.com");
-  return direct;
+  return key === own && item.url ? item.url : (SERVICE_SEARCH[key]?.(item.title) || item.providers?.link || "#");
+}
+// アプリを直接開くURLスキームへの書き換え。スキームが使えない端末でも
+// 一定時間で元のhttps URLにフォールバックするので安全に試せる
+const APP_SCHEME = {
+  netflix: (u) => u.replace(/^https?:\/\/(www\.)?netflix\.com/, "nflx://www.netflix.com"),
+  disney: (u) => u.replace(/^https?:\/\//, "disneyplus://"),
+  prime: (u) => u.replace(/^https?:\/\//, "primevideo://")
+};
+function openWatch(key, httpsUrl) {
+  const scheme = APP_SCHEME[key]?.(httpsUrl);
+  if (!scheme || scheme === httpsUrl) { window.open(httpsUrl, "_blank", "noreferrer"); return; }
+  // スキームでアプリ起動を試み、900ms経っても画面が切り替わらなければブラウザで開く
+  const timer = setTimeout(() => window.open(httpsUrl, "_blank", "noreferrer"), 900);
+  const onHide = () => { clearTimeout(timer); document.removeEventListener("visibilitychange", onHide); };
+  document.addEventListener("visibilitychange", onHide);
+  window.location.href = scheme;
 }
 
 // 絞り込みの状態（唯一の真実）。DOMではなくここを源にする。
@@ -871,10 +884,18 @@ function openDetail(item) {
   meta.className = "detail-meta";
   meta.textContent = [
     item.mediaType && item.mediaType !== "unknown" ? mediaLabels[item.mediaType] : null,
-    serviceLabel(item), formatRuntime(item.runtime), item.year, item.access,
+    serviceLabel(item), formatRuntime(item.runtime), item.year,
+    (item.countries || []).slice(0, 3).map(countryLabel).join("・") || null,
+    item.access,
     remaining !== null && remaining <= 30 ? (remaining <= 0 ? "まもなく終了" : `配信あと${remaining}日`) : null
   ].filter(Boolean).join(" · ");
   content.append(heading, meta);
+  if (item.tagline) {
+    const tagline = document.createElement("p");
+    tagline.className = "detail-tagline";
+    tagline.textContent = `“${item.tagline}”`;
+    content.append(tagline);
+  }
 
   const scoreTexts = [];
   if (item.rating) scoreTexts.push(`<span class="score-tmdb">★ ${item.rating}</span>`);
@@ -900,7 +921,14 @@ function openDetail(item) {
       chip.target = "_blank";
       chip.rel = "noreferrer";
       chip.setAttribute("aria-label", `${svc.label}で観る（${svc.kind}）`);
-      chip.href = watchUrlFor(svc.key, item, own);
+      const httpsUrl = watchUrlFor(svc.key, item, own);
+      chip.href = httpsUrl;
+      // アプリで開く（スキーム起動→ダメならブラウザ）
+      chip.addEventListener("click", (event) => {
+        if (!APP_SCHEME[svc.key]) return; // スキームが無いサービスは通常リンクに任せる
+        event.preventDefault();
+        openWatch(svc.key, httpsUrl);
+      });
       // 横長の公式ワードマークロゴ（白マスク・大きめで視認性を確保）
       const logo = serviceLogoEl(svc.key, 18);
       if (logo) {
@@ -932,8 +960,14 @@ function openDetail(item) {
   if (item.director || (item.cast && item.cast.length)) {
     const credits = document.createElement("p");
     credits.className = "detail-meta";
-    credits.textContent = [item.director ? `監督: ${item.director}` : null, item.cast && item.cast.length ? `出演: ${item.cast.slice(0, 4).join(" / ")}` : null].filter(Boolean).join("　");
+    credits.textContent = [item.director ? `監督: ${item.director}` : null, item.cast && item.cast.length ? `出演: ${item.cast.slice(0, 5).join(" / ")}` : null].filter(Boolean).join("　");
     content.append(credits);
+  }
+  if (item.awards) {
+    const awards = document.createElement("p");
+    awards.className = "detail-awards";
+    awards.textContent = `🏆 ${item.awards}`;
+    content.append(awards);
   }
   if (item.note) {
     const note = document.createElement("p");
