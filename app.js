@@ -1,8 +1,19 @@
 const $ = (selector, root = document) => root.querySelector(selector);
 const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
 
+// Gist/JSONから読み込んだURLをDOMへ渡す前にHTTPSだけへ制限する。
+// URL属性を壊す文字列やjavascript:等は空文字へ落とす。
+function safeHttpsUrl(value) {
+  try {
+    const url = new URL(String(value || ""));
+    return url.protocol === "https:" ? url.href : "";
+  } catch {
+    return "";
+  }
+}
+
 // 設定画面に表示するアプリ版数。デプロイのたびに上げ、実機で更新が届いたか確認できるようにする
-const APP_VERSION = "3.12.0";
+const APP_VERSION = "3.13.0";
 
 const storageKey = "streaming-mobile-viewer-items";
 const legacyStorageKey = "unext-mobile-viewer-items";
@@ -122,6 +133,8 @@ const APP_SCHEME = {
   prime: (u) => u.replace(/^https?:\/\//, "primevideo://")
 };
 function openWatch(key, httpsUrl) {
+  httpsUrl = safeHttpsUrl(httpsUrl);
+  if (!httpsUrl) return;
   const scheme = APP_SCHEME[key]?.(httpsUrl);
   if (!scheme || scheme === httpsUrl) { window.open(httpsUrl, "_blank", "noreferrer"); return; }
   // スキームでアプリ起動を試み、900ms経っても画面が切り替わらなければブラウザで開く
@@ -374,17 +387,19 @@ function resetFilters() {
 }
 
 /* ============ 保存・更新 ============ */
-function saveItems() {
+async function saveItems() {
   // IndexedDBへ非同期保存（容量制限に強い）。失敗時のみ画面に知らせる
-  idb.set("items", state.items).catch(() => {
+  const itemsSave = idb.set("items", state.items).catch((error) => {
     const status = $("#syncStatus");
     status.hidden = false;
     status.classList.add("is-error");
     status.textContent = "端末への保存に失敗しました（空き容量を確認してください）";
+    throw error;
   });
-  idb.set("deleted", state.deleted).catch(() => {});
+  const deletedSave = idb.set("deleted", state.deleted);
+  await Promise.all([itemsSave, deletedSave]);
 }
-function patchItem(id, patch) {
+async function patchItem(id, patch) {
   const item = state.items.find((entry) => entry.id === id);
   if (!item) return;
   const now = new Date().toISOString();
@@ -399,7 +414,7 @@ function patchItem(id, patch) {
     }
   }
   targets.forEach((target) => Object.assign(target, patch, { stateUpdatedAt: now, updatedAt: now }));
-  saveItems();
+  await saveItems();
   renderAll();
   GistSync.scheduleSync();
 }
@@ -494,7 +509,7 @@ function renderHome() {
   pickBox.replaceChildren();
   if (pick) {
     pickBox.innerHTML = `
-      <img class="hp-poster" src="${posterOf(pick.item)}" alt="" referrerpolicy="no-referrer" />
+      <img class="hp-poster" src="${escapeHtml(safeHttpsUrl(posterOf(pick.item)))}" alt="" referrerpolicy="no-referrer" />
       <div class="hp-body">
         <span class="hp-kicker">今夜の一本</span>
         <span class="hp-title">${escapeHtml(pick.item.title)}</span>
@@ -734,17 +749,19 @@ function createPosterCard(item) {
   const card = $("#posterTemplate").content.firstElementChild.cloneNode(true);
   card.classList.toggle("is-watched", Boolean(item.watched));
   const poster = $(".poster", card);
-  const src = posterOf(item);
+  const src = safeHttpsUrl(posterOf(item));
   if (src) poster.src = src;
   poster.alt = item.title || "";
   poster.addEventListener("error", () => {
-    if (item.tmdbImage && poster.src !== item.tmdbImage) poster.src = item.tmdbImage;
+    const fallback = safeHttpsUrl(item.tmdbImage);
+    if (fallback && poster.src !== fallback) poster.src = fallback;
     else poster.removeAttribute("src");
   });
   // 横長画像が紛れ込んだら縦型のTMDBポスターに自動で差し替える
   poster.addEventListener("load", () => {
-    if (poster.naturalWidth > poster.naturalHeight && item.tmdbImage && !poster.src.includes("image.tmdb.org")) {
-      poster.src = item.tmdbImage;
+    const fallback = safeHttpsUrl(item.tmdbImage);
+    if (poster.naturalWidth > poster.naturalHeight && fallback && !poster.src.includes("image.tmdb.org")) {
+      poster.src = fallback;
     }
   });
   if (item.favorite) $(".poster-fav", card).hidden = false;
@@ -836,7 +853,7 @@ function renderPicks() {
   } else {
     const i = pick.item;
     hero.innerHTML = `
-      <img class="ph-poster" src="${posterOf(i)}" alt="" referrerpolicy="no-referrer" />
+      <img class="ph-poster" src="${escapeHtml(safeHttpsUrl(posterOf(i)))}" alt="" referrerpolicy="no-referrer" />
       <div class="pick-hero-inner">
         <div class="ph-kicker">TONIGHT'S PICK</div>
         <h2 class="ph-title">${escapeHtml(i.title)}</h2>
@@ -844,7 +861,7 @@ function renderPicks() {
         <div class="ph-reasons">${pick.reasons.map((r) => `<div class="ph-reason">${escapeHtml(r)}</div>`).join("")}</div>
         <div class="ph-actions">
           <button type="button" class="ph-detail">詳細を見る</button>
-          <a class="ph-watch" href="${i.url || "#"}" target="_blank" rel="noreferrer">${serviceLabel(i)}で観る</a>
+          <a class="ph-watch" href="${escapeHtml(safeHttpsUrl(i.url) || "#")}" target="_blank" rel="noreferrer">${serviceLabel(i)}で観る</a>
         </div>
       </div>`;
     $(".ph-detail", hero).addEventListener("click", () => openDetail(i));
@@ -868,7 +885,7 @@ function renderPicks() {
     const row = document.createElement("button");
     row.type = "button";
     row.className = "backlog-row";
-    row.innerHTML = `<img class="bl-poster" src="${posterOf(i)}" alt="" referrerpolicy="no-referrer" />
+    row.innerHTML = `<img class="bl-poster" src="${escapeHtml(safeHttpsUrl(posterOf(i)))}" alt="" referrerpolicy="no-referrer" />
       <div class="backlog-body"><div class="backlog-title">${escapeHtml(i.title)}</div><div class="backlog-sub">${[serviceLabel(i), formatRuntime(i.runtime)].filter(Boolean).join(" · ")}</div></div>
       <div class="backlog-days">${days}日</div>`;
     row.addEventListener("click", () => openDetail(i));
@@ -914,19 +931,20 @@ function renderSettings() {
 function escapeHtml(s) { return String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c])); }
 
 function openTrailer(item) {
-  if (!item.trailerKey) {
+  const trailerKey = /^[A-Za-z0-9_-]{6,32}$/.test(String(item.trailerKey || "")) ? item.trailerKey : "";
+  if (!trailerKey) {
     window.open(`https://www.youtube.com/results?search_query=${encodeURIComponent(`${item.title} 予告編`)}`, "_blank", "noreferrer");
     return;
   }
   $("#trailerTitle").textContent = item.title;
-  $("#trailerFrame").src = `https://www.youtube-nocookie.com/embed/${item.trailerKey}?autoplay=1&playsinline=1`;
+  $("#trailerFrame").src = `https://www.youtube-nocookie.com/embed/${trailerKey}?autoplay=1&playsinline=1`;
   $("#trailerDialog").showModal();
 }
 
 function openDetail(item) {
   const content = $("#detailContent");
   content.replaceChildren();
-  const posterUrl = posterOf(item);
+  const posterUrl = safeHttpsUrl(posterOf(item));
   if (posterUrl) {
     const image = document.createElement("img");
     image.src = posterUrl;
@@ -981,11 +999,11 @@ function openDetail(item) {
       chip.rel = "noreferrer";
       chip.setAttribute("aria-label", `${svc.label}で観る（${svc.kind}）`);
       // 直接URL（保存元・重複分）を最優先、無ければサービス内検索
-      const httpsUrl = svc.url || watchUrlFor(svc.key, item, own);
-      chip.href = httpsUrl;
+      const httpsUrl = safeHttpsUrl(svc.url || watchUrlFor(svc.key, item, own));
+      chip.href = httpsUrl || "#";
       // アプリで開く（スキーム起動→ダメならブラウザ）
       chip.addEventListener("click", (event) => {
-        if (!APP_SCHEME[svc.key]) return; // スキームが無いサービスは通常リンクに任せる
+        if (!httpsUrl || !APP_SCHEME[svc.key]) return; // スキームが無いサービスは通常リンクに任せる
         event.preventDefault();
         openWatch(svc.key, httpsUrl);
       });
@@ -1020,11 +1038,22 @@ function openDetail(item) {
   const desc = document.createElement("p");
   desc.textContent = item.description || "あらすじは登録されていません。";
   content.append(desc);
-  if (item.director || (item.cast && item.cast.length)) {
+  if (item.director || item.cast?.length || item.screenplay?.length || item.producers?.length) {
     const credits = document.createElement("p");
     credits.className = "detail-meta";
-    credits.textContent = [item.director ? `監督: ${item.director}` : null, item.cast && item.cast.length ? `出演: ${item.cast.slice(0, 5).join(" / ")}` : null].filter(Boolean).join("　");
+    credits.textContent = [
+      item.director ? `監督: ${item.director}` : null,
+      item.cast?.length ? `出演: ${item.cast.slice(0, 5).join(" / ")}` : null,
+      item.screenplay?.length ? `脚本: ${item.screenplay.join(" / ")}` : null,
+      item.producers?.length ? `製作: ${item.producers.join(" / ")}` : null
+    ].filter(Boolean).join("　");
     content.append(credits);
+  }
+  if (item.unextHighlight) {
+    const highlight = document.createElement("p");
+    highlight.textContent = `見どころ\n${item.unextHighlight}`;
+    highlight.style.whiteSpace = "pre-line";
+    content.append(highlight);
   }
   if (item.awards) {
     const awards = document.createElement("p");
@@ -1095,9 +1124,29 @@ async function loadStoredItems() {
 const GistSync = (() => {
   const GIST_API = "https://api.github.com/gists";
   const GIST_FILE = "mylist.json";
+  const TOMBSTONE_LIMIT = 500;
   const STATE_FIELDS = ["watched", "favorite", "hidden", "tags", "note"];
   let pushTimer = null;
   let syncing = false;
+  let rerunRequested = false;
+
+  const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+  async function fetchWithRetry(url, init, attempts = 3) {
+    let lastError;
+    for (let attempt = 0; attempt < attempts; attempt += 1) {
+      try {
+        const response = await fetch(url, init);
+        if (response.status !== 429 && response.status < 500) return response;
+        lastError = new Error(`HTTP ${response.status}`);
+        if (attempt === attempts - 1) return response;
+      } catch (error) {
+        lastError = error;
+        if (attempt === attempts - 1) throw error;
+      }
+      await sleep(800 * (2 ** attempt));
+    }
+    throw lastError;
+  }
 
   const metaStamp = (item) => Date.parse(item?.updatedAt || item?.lastCheckedAt || item?.importedAt || "") || 0;
   const stateStamp = (item) => Date.parse(item?.stateUpdatedAt || "") || 0;
@@ -1179,33 +1228,47 @@ const GistSync = (() => {
       const t = Date.parse(at) || 0;
       if (item && stateStamp(item) <= t && importedStamp(item) <= t) map.delete(id);
     }
-    return { items: [...map.values()], deleted };
+    const tombstones = Object.entries(deleted)
+      .sort((a, b) => (Date.parse(b[1]) || 0) - (Date.parse(a[1]) || 0))
+      .slice(0, TOMBSTONE_LIMIT);
+    return { items: [...map.values()], deleted: Object.fromEntries(tombstones) };
   }
   async function syncNow() {
     const config = getConfig();
-    if (!config.token || !config.gistId || syncing) return;
+    if (!config.token || !config.gistId) return;
+    if (syncing) { rerunRequested = true; return; }
     syncing = true;
     setStatus("同期中…");
     if (state.currentView === "settings") $("#settingsSyncState").textContent = "同期中…";
     try {
       const headers = { Accept: "application/vnd.github+json", Authorization: `Bearer ${config.token}` };
-      const response = await fetch(`${GIST_API}/${config.gistId}`, { headers });
+      const response = await fetchWithRetry(`${GIST_API}/${config.gistId}`, { headers });
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
       const gist = await response.json();
       const file = gist.files?.[GIST_FILE];
       let remote = { items: [], deleted: {} };
       if (file) {
-        const text = file.truncated ? await (await fetch(file.raw_url)).text() : file.content;
-        try { remote = normalizePayload(JSON.parse(text)); } catch { /* 壊れたデータは空扱い */ }
+        const text = file.truncated ? await (await fetchWithRetry(file.raw_url)).text() : file.content;
+        try { remote = normalizePayload(JSON.parse(text)); } catch { throw new Error("Gistの同期データが壊れています。上書きを停止しました"); }
       }
-      const merged = mergeStates(normalizePayload({ items: state.items, deleted: state.deleted }), remote);
+      let merged = mergeStates(normalizePayload({ items: state.items, deleted: state.deleted }), remote);
+      // PATCH直前にもう一度読み、同期開始後に別端末で入った変更も取り込む。
+      const latestResponse = await fetchWithRetry(`${GIST_API}/${config.gistId}`, { headers });
+      if (latestResponse.ok) {
+        const latestGist = await latestResponse.json();
+        const latestFile = latestGist.files?.[GIST_FILE];
+        if (latestFile) {
+          const latestText = latestFile.truncated ? await (await fetchWithRetry(latestFile.raw_url)).text() : latestFile.content;
+          try { merged = mergeStates(normalizePayload({ items: state.items, deleted: state.deleted }), mergeStates(merged, normalizePayload(JSON.parse(latestText)))); } catch { throw new Error("Gistの同期データが壊れています。上書きを停止しました"); }
+        }
+      }
       state.items = merged.items.map(normalizeItem);
       state.deleted = merged.deleted;
-      saveItems();
+      await saveItems();
       state.pickDirty = true;
       renderAll();
       const content = JSON.stringify({ version: 2, updatedAt: new Date().toISOString(), items: state.items, deleted: state.deleted });
-      const patch = await fetch(`${GIST_API}/${config.gistId}`, {
+      const patch = await fetchWithRetry(`${GIST_API}/${config.gistId}`, {
         method: "PATCH",
         headers: { ...headers, "Content-Type": "application/json" },
         body: JSON.stringify({ files: { [GIST_FILE]: { content } } })
@@ -1235,6 +1298,10 @@ const GistSync = (() => {
       if (state.currentView === "settings") renderSettings();
     } finally {
       syncing = false;
+      if (rerunRequested) {
+        rerunRequested = false;
+        scheduleSync(0);
+      }
     }
   }
   function scheduleSync(delay = 2500) {
@@ -1247,17 +1314,28 @@ const GistSync = (() => {
 })();
 
 async function importFile(file) {
+  if (file.size > 20 * 1024 * 1024) throw new Error("ファイルが大きすぎます（上限20MB）");
   const parsed = JSON.parse(await file.text());
   const incoming = Array.isArray(parsed) ? parsed : parsed.items;
   if (!Array.isArray(incoming)) throw new Error("items配列がありません");
+  if (incoming.length > 20000) throw new Error("作品数が多すぎます（上限20,000件）");
+  if (incoming.some((item) => !item || typeof item !== "object" || Array.isArray(item))) throw new Error("作品データの形式が正しくありません");
+  if (incoming.some((item) => typeof item.title !== "string" || item.title.length > 500)) throw new Error("タイトルが不正な作品があります");
   if (parsed.deleted && typeof parsed.deleted === "object") Object.assign(state.deleted, parsed.deleted);
+  if (parsed.preferences && typeof parsed.preferences === "object" && !Array.isArray(parsed.preferences)) {
+    if (["grid", "list"].includes(parsed.preferences.density)) {
+      libDensity = parsed.preferences.density;
+      localStorage.setItem("tonite-density", libDensity);
+    }
+    if (Array.isArray(parsed.preferences.savedViews)) SavedViews.save(parsed.preferences.savedViews.slice(0, 50));
+  }
   const existing = new Map(state.items.map((item) => [item.id, item]));
   incoming.map(normalizeItem).forEach((item) => {
     const previous = existing.get(item.id);
     existing.set(item.id, { ...previous, ...item, watched: previous?.watched ?? item.watched, favorite: previous?.favorite ?? item.favorite });
   });
   state.items = [...existing.values()].map(normalizeItem);
-  saveItems();
+  await saveItems();
   state.pickDirty = true;
   renderAll();
   GistSync.scheduleSync();
@@ -1313,7 +1391,8 @@ handleImport($("#importJson"));
 handleImport($("#importJson2"));
 
 function exportJson() {
-  const payload = JSON.stringify({ version: 1, exportedAt: new Date().toISOString(), items: state.items }, null, 2);
+  const preferences = { density: libDensity, savedViews: SavedViews.load() };
+  const payload = JSON.stringify({ version: 2, exportedAt: new Date().toISOString(), items: state.items, deleted: state.deleted, preferences }, null, 2);
   const url = URL.createObjectURL(new Blob([payload], { type: "application/json" }));
   const anchor = document.createElement("a");
   anchor.href = url;
@@ -1324,17 +1403,17 @@ function exportJson() {
 $("#exportJson").addEventListener("click", exportJson);
 $("#settingsExport").addEventListener("click", exportJson);
 
-function clearAll() {
+async function clearAll() {
   if (!confirm("この端末に保存した作品データを削除しますか？（同期先のデータは残り、次回同期で戻ります）")) return;
   state.items = [];
-  saveItems();
+  await saveItems();
   state.pickDirty = true;
   renderAll();
 }
 $("#clearAll").addEventListener("click", clearAll);
 $("#settingsClear").addEventListener("click", clearAll);
 
-$("#loadSample").addEventListener("click", () => { state.items = sampleItems.map(normalizeItem); saveItems(); state.pickDirty = true; renderAll(); });
+$("#loadSample").addEventListener("click", async () => { state.items = sampleItems.map(normalizeItem); await saveItems(); state.pickDirty = true; renderAll(); });
 
 // 同期ダイアログ
 function openSyncDialog() {
